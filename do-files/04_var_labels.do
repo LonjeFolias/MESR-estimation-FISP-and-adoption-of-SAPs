@@ -1,4 +1,11 @@
-	
+
+
+global socio 		age 		gender 		educ 					hh_Size
+global insitutional extension 	credit	
+global farmlevel 	type2 		type3 		quality2 				quality3
+global weather  	l_avr_yearly_tmp2019   	l_avr_yearly_pre2019
+global selection	
+global eq			$socio		$insitutional		$farmlevel		$weather 	
   
 	foreach command of local user_commands {
 		   cap which `command'
@@ -7,6 +14,7 @@
 		   }
 	 }
 
+*use "${workingfiles}/IHSVProposal_Data.dta", clear
 
 g 		combined_fisp_saps=4 if combined==0 
 
@@ -31,6 +39,13 @@ g l_harvest =ln(harvest)
 			replace l_`dependent'`class'=. 				if `class'!=combined_fisp_saps
 		}
 	}
+
+
+save "${workingfiles}/working data.dta", replace 
+
+
+use "${workingfiles}/working data.dta", clear
+
 
 
 
@@ -149,3 +164,7 @@ drop FCSa
 la var agesq "Age squared"
 la var TLU "Tropical Livestock Unit"
 la var off_farm "Off farm actoivities"
+
+recode  com_cd71 (.=0)
+
+save "${workingfiles}/final esr data.dta", replace

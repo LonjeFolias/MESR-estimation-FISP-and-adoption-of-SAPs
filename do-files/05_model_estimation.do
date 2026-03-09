@@ -623,3 +623,629 @@ ok
 		
 		*IV Test 
 		reg FCS4 agesq  gender educ hh_Size extension credit FGT0  TLU l_avr_yearly_pre2019 avr_yearly_tmp2019  IV_fisp IV_saps IV_fisp_saps mp , r
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		   * ******************************************************************** *
+   * ******************************************************************** *
+   *                                                                      *
+   *               Farm input subsidies (FISP) and adoption of sustainable* 
+   *               agricultural practices in Malawi: synergies and		  * 
+   *               implications on farm productivity and household		  * 
+   *               resilience to food shocks                              *
+   *																	  *
+   *               Model Estimation  DO_FILE : This do file estimates 	  *
+   *			   1)Probit Models to determine factors influencing       *
+   *			   farmers' adoption/participation of the coupling        *
+   *			   of FISP with SAPs.                                     *
+   *   			   2) estimates the Selectivity-corrected Multinomial     *
+   *			   Endogenous Switching Probit (MNESR) model to quantify  *
+   *			   the impacts of coupling of FISP with SAPs on           *
+   *               productivity and food security                         *
+   *               														  *                                
+   *				Author : Lonjezo Erick Folias                         *
+   *				Number : 0992 888 003   							  *
+   *				Email  : lonjefolias@hotmail.com					  *
+   * ******************************************************************** *
+   * ******************************************************************** *
+
+	/*
+	** OUTLINE:     
+		PART 0: Globals/Locals and Macros 
+		PART 1: Installing uncommon packages that this project requires
+		PART 2: Objective 1 Models : Probit Models
+		PART 3: Robust Checks : Recursive bivariate probit regression
+		PART 4: Objective 2 :  Impact Evaluation through MESR Models
+		PART 5: Unconditional Average treatment effects  (ATU) 
+		PART 6: Average treatment effects on the Treated  (ATT)
+		PART 7: Heterogeniety effects
+		
+	*/
+
+
+global hh 			agesq  	gender 	educ 	hh_Size /// 
+marital2 marital3 marital4	TLU shock
+	
+global institution	credit
+global weather		avr_yearly_pre2019 		avr_yearly_tmp2019	
+global farmlevel	type2 					type3 				quality2 	quality3
+
+*Model equations
+global foodsecurity_eq 		$hh 	off_farm		FGT0 com_cd71  	$institution 	$weather
+
+global fisp_eq 				$hh 	off_farm		FGT0	years_village	$institution 	mp 	drought		$weather 	IV_fisp_saps
+global saps 				$hh 	off_farm		FGT0	years_village	$institution 	mp	drought 	$weather 	$farmlevel		IV_fisp_saps
+global productivity			$hh 	    			FGT0   	years_village	$institution 	extension		drought		$weather	$farmlevel
+global outcome 				p		f 				h 
+global mprobit				$hh 	off_farm		FGT0	$institution 	$weather 	$farmlevel	 IV_fisp_saps
+	 
+
+	 
+global categorical 	gender 		FGT0 		extension				credit  ///
+type1  type2 		type3 		quality1 	quality2 				quality3 		drought 		box_ridges 				minimum_tillage 		///
+erosion_control_bunds 			vetiver 	plating_pits 			traditional_tilage ///
+Terraces Water_harvest_bunds 	agro_forestry  						none
+
+		
+		
+global continous 	age 		educ 		hh_Size 				Plot_Area 	///
+output l_avr_yearly_tmp2019 	l_avr_yearly_pre2019  				IV_fisp 	///
+IV_saps IV_fisp_saps
+
+
+	*Svy Set 
+	svyset 	case_id 	[pweight= hh_wgt ], 	strata( ea_id ) 	singleunit(centered)
+	
+		
+keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* HDDS* region district reside hh_wgt TAs fisp  saps type1 type2 type3 quality1 quality2 quality3 IV_fisp IV_saps IV_fisp_saps FGT0 $selection plating_pits traditional_tilage Terraces Water_harvest_bunds dry_season organic_fertilizer agro_forestry inorganic_fertilizer erosion_control_bunds vetiver box_ridges minimum_tillage type quality Plot_Area output 	avr_yearly_tmp2019 avr_yearly_pre2019 fisp_saps none IV_none $eq1 $eq2 $eq3 $eq4 l_* mp com_cd71 years_village harves* TLU off_farm FCS age* dependency drought floods FGT1  $saps  combined_fisp_saps marital1 marital2 marital3  marital4 shock extension dependency
+
+
+g combined=1 	if 		combined_fisp_saps==3
+
+foreach i in combined fisp saps none {
+		recode `i' (.=0)
+}
+
+
+
+
+**#PART 4: Objective 2 :  Impact Evaluation through MESR Models
+		
+	*A suser written selmlog ado file
+	local runningscript_firsttime "No" //ARE YOU RUNNING THIS SCRIPT FOR THE FIRST TIME (After reopening Stata?)  Yes/No : Input the answer in the local below
+	
+	if  "`runningscript_firsttime'"=="Yes" {
+		
+		do "$dofiles/06_selmlog.do" 	
+		
+	}
+  
+	
+		svyset 	case_id 	[pweight= hh_wgt ], 	strata( ea_id ) 	singleunit(centered)
+		
+		collect clear
+		
+	*Productivity Model
+		
+		foreach number in 4 1 2 3    { //a loop for efficiency
+			
+			local 	selection_4			 IV_none 
+			local 	selection_3			 IV_fisp_saps drought mp extension educ 
+			local 	selection_1			 IV_fisp drought mp educ 
+			local 	selection_2			 IV_saps  educ 
+		
+			
+		*Selmlog estimation	
+		*The if are applying due to changes in the IV
+			svyset 	case_id 	[pweight= hh_wgt ], 	strata( ea_id ) 	singleunit(centered)
+			collect _r_b _r_se, tag(model[(`number')]): selmlog productivity`number' $productivity mp com_cd71 if productivity`number'>0 , select(combined_fisp_saps =  `selection_`number'')  boot(300) dmf(0)  gen(m`number')	
+		
+		 
+		 
+			// Overall significance and Number of observetions 
+			test 		$productivity	
+			local		chi2				`r(chi2)'
+			collect 	chi2 = r(value),	tag(model[(`number')]):  echo	`chi2'
+			
+			test 		$productivity	
+			local		p				 	`r(p)'
+			collect 	p= r(value),		tag(model[(`number')]):  echo	`p'
+			
+			count 		if 					combined_fisp_saps==`number'
+			local 		N			 		`r(N)'
+			collect 	N= r(value),		tag(model[(`number')]):  echo	`N'
+		
+		
+			//predicitons for average estimations
+			if `number'==4 {
+					rename 		m`number'3 		_m3
+					rename 		m`number'1 		_m1
+					rename 		m`number'2 		_m2
+					predict		y_bar_p_`number', xb
+					
+					ge Emz_p_`number'= 	( y_bar_p_`number' )
+					ge Emz_p_`number'_3= 	Emz_p_`number' 	if 	combined_fisp_saps  ==3
+					ge Emz_p_`number'_2= 	Emz_p_`number' 	if 	combined_fisp_saps  ==2
+					ge Emz_p_`number'_1= 	Emz_p_`number'	if 	combined_fisp_saps  ==1
+					ge Emz_p_`number'_4=	Emz_p_`number'  if 	combined_fisp_saps  ==4
+			
+			}
+			
+			if `number'==3 {
+					rename 		m`number'4 		_m4
+					rename 		m`number'1 		_m1
+					rename 		m`number'2 		_m2
+					predict		y_bar_p_`number', xb
+					ge Emz_p_`number'= 	( y_bar_p_`number' )
+					ge Emz_p_`number'_3= 	Emz_p_`number' 	if 	combined_fisp_saps  ==3
+					ge Emz_p_`number'_2= 	Emz_p_`number' 	if 	combined_fisp_saps  ==2
+					ge Emz_p_`number'_1= 	Emz_p_`number'	if 	combined_fisp_saps  ==1
+					ge Emz_p_`number'_4=	Emz_p_`number'  if 	combined_fisp_saps  ==4
+			}
+			
+			if `number'==1 {
+					rename 		m`number'4  	_m4
+					rename 		m`number'3 		_m3
+					rename 		m`number'2		_m2
+					predict		y_bar_p_`number', xb
+					ge Emz_p_`number'= 	( y_bar_p_`number' )
+					ge Emz_p_`number'_3= 	Emz_p_`number' 	if 	combined_fisp_saps  ==3
+					ge Emz_p_`number'_2= 	Emz_p_`number' 	if 	combined_fisp_saps  ==2
+					ge Emz_p_`number'_1= 	Emz_p_`number'	if 	combined_fisp_saps  ==1
+					ge Emz_p_`number'_4=	Emz_p_`number'  if 	combined_fisp_saps  ==4
+			}
+			
+			if `number'==2 {
+					rename 		m`number'4  	_m4
+					rename 		m`number'3 		_m3
+					rename 		m`number'1 		_m1
+					predict		y_bar_p_`number', xb
+					ge Emz_p_`number'= 	( y_bar_p_`number' )
+					ge Emz_p_`number'_3= 	Emz_p_`number' 	if 	combined_fisp_saps  ==3
+					ge Emz_p_`number'_2= 	Emz_p_`number' 	if 	combined_fisp_saps  ==2
+					ge Emz_p_`number'_1= 	Emz_p_`number'	if 	combined_fisp_saps  ==1
+					ge Emz_p_`number'_4=	Emz_p_`number'  if 	combined_fisp_saps  ==4
+			}
+			
+		}
+		
+		
+		collect style cell result[_r_se], nformat(%4.3f) 		halign(center)
+		collect style cell result[_r_b ], nformat(%10.4f) 		halign(center)
+		collect style cell result[_r_z ], nformat(%5.2f) 		halign(center)
+		collect style cell result[_r_se], sformat("(%s)") 		halign(center)
+		collect stars _r_p 0.01 "***" 0.05 "**" 0.1 "*" 1  " ", attach(_r_b) 
+		collect composite  define meansd =  _r_b _r_se		
+		collect style showbase off
+
+		*Removing vertor line
+		collect style cell border_block, border(right, pattern(nil))  
+		collect levelsof cell_type
+		collect style cell cell_type[item column-header], halign(center)
+		collect style header result, level(hide)
+		collect style row stack, spacer delimiter(" x ")
+		collect stars _r_p  0.01 "***" 0.05 "** " 0.1 "* " 1 " ", attach(_r_b) 
+		collect layout   (colname) (model#result[meansd _r_z])
+		collect style cell result[chi2 p N], nformat(%8.2f)
+		collect style header result[chi2 p N], level(label)
+		collect style putdocx, layout(autofitcontents)
+		collect export "$result/productivity.docx", as(docx) replace
+
+		
+		
+		**#PART 5: Unconditional mean differences (NOT ATU)
+
+
+local command "command( Use=r(mu_1) Non_Use=r(mu_2) (Difference=r(mu_1)-r(mu_2)) pvalue=r(p)"
+
+table (command) (result), ///
+    `command' : ttest Emz_p_3 == Emz_p_4 ) ///
+    `command' : ttest Emz_p_1 == Emz_p_4 ) ///
+    `command' : ttest Emz_p_2 == Emz_p_4 )
+		
+		
+collect style cell result[Use Non_Use Difference], nformat(%10.2f)
+collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
+collect style putdocx, layout(autofitcontents)
+collect export Unconditional_Mean_Differences.docx, as(docx) replace
+
+
+**#PART 6: Average Treatment Effect on the Treated (ATT)
+
+table (command) (result), ///
+    `command' : ttest Emz_p_3_3 == Emz_p_4_3 ) ///
+    `command' : ttest Emz_p_1_1 == Emz_p_4_1 ) ///
+    `command' : ttest Emz_p_2_2 == Emz_p_4_2 )
+
+collect style cell result[Treated Counterfactual Difference], nformat(%10.2f)
+collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
+collect style putdocx, layout(autofitcontents)
+collect export ATT_Conditional.docx, as(docx) replace
+
+
+**#PART 7: Average Treatment Effect on the Untreated (ATU)
+local command "command( Counterfactual_Treated=r(mu_1) Observed_Untreated=r(mu_2) Difference=r(mu_1)-r(mu_2) pvalue=r(p) "
+
+table (command) (result),  ///
+    `command' : ttest Emz_p_3_4 == Emz_p_4_4 ) ///
+    `command' : ttest Emz_p_1_4 == Emz_p_4_4 ) ///
+    `command' : ttest Emz_p_2_4 == Emz_p_4_4 )
+
+collect style cell result[Counterfactual_Treated Observed_Untreated Difference], nformat(%10.2f)
+collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
+collect style putdocx, layout(autofitcontents)
+collect export ATU_Conditional.docx, as(docx) replace
+
+
+
+**#PART 8: Cross-regime heterogeneity comparisons
+local command "command( RegimeA=r(mu_1) RegimeB=r(mu_2) Difference=r(mu_1)-r(mu_2) pvalue=r(p) "
+
+table (command) (result), ///
+    `command' : ttest Emz_p_2_3 == Emz_p_1_3 ) ///
+    `command' : ttest Emz_p_2_1 == Emz_p_3_1 ) ///
+    `command' : ttest Emz_p_1_2 == Emz_p_3_2 )
+
+collect style cell result[RegimeA RegimeB Difference], nformat(%10.2f)
+collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
+collect style putdocx, layout(autofitcontents)
+collect export Heterogeneity_Comparisons.docx, as(docx) replace
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+global hh 			agesq  					gender 				educ 	hh_Size /// 
+marital2 marital3 marital4	TLU shock
+	
+global institution	credit
+global weather		avr_yearly_pre2019 		avr_yearly_tmp2019	
+global farmlevel	type2 					type3 				quality2 	quality3
+
+*Model equations
+global foodsecurity_eq 		$hh 	off_farm		FGT0 com_cd71  	$institution 	$weather
+
+global fisp_eq 				$hh 	off_farm		FGT0	years_village	$institution 	mp 	drought		$weather 	IV_fisp_saps
+global saps 				$hh 	off_farm		FGT0	years_village	$institution 	mp	drought 	$weather 	$farmlevel		IV_fisp_saps
+global productivity			$hh 	    			FGT0   	years_village	$institution 		drought		$weather	$farmlevel
+global outcome 				p		f 				h 
+global mprobit				$hh 	off_farm		FGT0	$institution 	$weather 	$farmlevel	 IV_fisp_saps
+
+		collect clear
+*HDDS Models
+		foreach 	number in 4 1 2 3   { //a loop for efficiency
+			
+				
+			local 	selection_4			 IV_none
+			local 	selection_3			 IV_fisp_saps avr_yearly_pre2019  mp extension educ 
+			local 	selection_1			 IV_fisp drought mp educ 
+			local 	selection_2			 IV_saps  educ 
+			
+		*Selmlog estimation	
+		*The if are applying due to changes in the IV
+		
+				  collect _r_b _r_se, tag(model[(`number')]): selmlog HDDS`number' $foodsecurity_eq, select(combined_fisp_saps =  `selection_`number'') boot(300) dmf(0) gen(m`number')
+				  
+			// Overall significance and Number of observetions 
+	// Overall significance and Number of observetions 
+			test 		$foodsecurity_eq
+			local		chi2				`r(chi2)'
+			collect 	chi2 = r(value),	tag(model[(`number')]):  echo	`chi2'
+			
+			test 		$foodsecurity_eq
+			local		p				 	`r(p)'
+			collect 	p= r(value),		tag(model[(`number')]):  echo	`p'
+			
+			count 		if 					combined_fisp_saps==`number'
+			local 		N			 		`r(N)'
+			collect 	N= r(value),		tag(model[(`number')]):  echo	`N'
+		
+			//predicitons for average treatment estimations
+
+			if `number'==4 {
+					rename 		m`number'3 		_m3
+					rename 		m`number'1 		_m1
+					rename 		m`number'2 		_m2
+					predict		y_bar_h_`number', xb
+					ge Emz_h_`number'= 	( y_bar_h_`number' )
+					ge Emz_h_`number'_3= 	Emz_h_`number' 	if 	combined_fisp_saps  ==3
+					ge Emz_h_`number'_2= 	Emz_h_`number' 	if 	combined_fisp_saps  ==2
+					ge Emz_h_`number'_1= 	Emz_h_`number'	if 	combined_fisp_saps  ==1
+					ge Emz_h_`number'_4=	Emz_h_`number'  if 	combined_fisp_saps  ==4
+			}
+			
+
+			if `number'==3 {
+					rename 		m`number'4 		_m4
+					rename 		m`number'1 		_m1
+					rename 		m`number'2 		_m2
+					predict		y_bar_h_`number', xb
+					ge Emz_h_`number'= 	( y_bar_h_`number' )
+					ge Emz_h_`number'_3= 	Emz_h_`number' 	if 	combined_fisp_saps  ==3
+					ge Emz_h_`number'_2= 	Emz_h_`number' 	if 	combined_fisp_saps  ==2
+					ge Emz_h_`number'_1= 	Emz_h_`number'	if 	combined_fisp_saps  ==1
+					ge Emz_h_`number'_4=	Emz_h_`number'  if 	combined_fisp_saps  ==4
+			}
+			
+			if `number'==1 {
+					rename 		m`number'4  	_m4
+					rename 		m`number'3 		_m3
+					rename 		m`number'2		_m2
+					predict		y_bar_h_`number', xb
+					ge Emz_h_`number'= 	( y_bar_h_`number' )
+					ge Emz_h_`number'_3= 	Emz_h_`number' 	if 	combined_fisp_saps  ==3
+					ge Emz_h_`number'_2= 	Emz_h_`number' 	if 	combined_fisp_saps  ==2
+					ge Emz_h_`number'_1= 	Emz_h_`number'	if 	combined_fisp_saps  ==1
+					ge Emz_h_`number'_4=	Emz_h_`number'  if 	combined_fisp_saps  ==4
+			}
+			
+			if `number'==2 {
+					rename 		m`number'4  	_m4
+					rename 		m`number'3 		_m3
+					rename 		m`number'1 		_m1
+					predict		y_bar_h_`number', xb
+					ge Emz_h_`number'= 	( y_bar_h_`number' )
+					ge Emz_h_`number'_3= 	Emz_h_`number' 	if 	combined_fisp_saps  ==3
+					ge Emz_h_`number'_2= 	Emz_h_`number' 	if 	combined_fisp_saps  ==2
+					ge Emz_h_`number'_1= 	Emz_h_`number'	if 	combined_fisp_saps  ==1
+					ge Emz_h_`number'_4=	Emz_h_`number'  if 	combined_fisp_saps  ==4
+			}
+			
+		}
+		
+	
+		collect style cell result[_r_se], nformat(%6.4f) 		halign(center)
+		collect style cell result[_r_b ], nformat(%10.6f) 		halign(center)
+		collect style cell result[_r_z ], nformat(%5.2f) 		halign(center)
+		collect style cell result[_r_se], sformat("(%s)") 		halign(center)
+		collect stars _r_p 0.01 "***" 0.05 "**" 0.1 "*" 1  " ", attach(_r_b) 
+		collect composite  define meansd =  _r_b _r_se		
+		collect style showbase off
+
+		*Removing vertor line
+		collect style cell border_block, border(right, pattern(nil))  
+		collect levelsof cell_type
+		collect style cell cell_type[item column-header], halign(center)
+		collect style header result, level(hide)
+		collect style row stack, spacer delimiter(" x ")
+		collect stars _r_p  0.01 "***" 0.05 "** " 0.1 "* " 1 " ", attach(_r_b) 
+		collect layout   (colname) (model#result[meansd _r_z])
+		collect style cell result[chi2 p N], nformat(%10.6f)
+		collect style header result[chi2 p N], level(label)
+		collect style putdocx, layout(autofitcontents)
+		collect export HDDS1.docx, as(docx) replace
+		
+		
+		
+				**#PART 5: Unconditional mean differences (NOT ATU)
+
+
+local command "command( Use=r(mu_1) Non_Use=r(mu_2) (Difference=r(mu_1)-r(mu_2)) pvalue=r(p)"
+
+table (command) (result), ///
+    `command' : ttest Emz_h_3 == Emz_h_4 ) ///
+    `command' : ttest Emz_h_1 == Emz_h_4 ) ///
+    `command' : ttest Emz_h_2 == Emz_h_4 )
+		
+		
+collect style cell result[Use Non_Use Difference], nformat(%10.2f)
+collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
+collect style putdocx, layout(autofitcontents)
+collect export HHDSUnconditional_Mean_Differences.docx, as(docx) replace
+
+
+**#PART 6: Average Treatment Effect on the Treated (ATT)
+
+table (command) (result), ///
+    `command' : ttest Emz_h_3_3 == Emz_h_4_3 ) ///
+    `command' : ttest Emz_h_1_1 == Emz_h_4_1 ) ///
+    `command' : ttest Emz_h_2_2 == Emz_h_4_2 )
+
+collect style cell result[Treated Counterfactual Difference], nformat(%10.2f)
+collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
+collect style putdocx, layout(autofitcontents)
+collect export HHDSATT_Conditional.docx, as(docx) replace
+
+
+**#PART 7: Average Treatment Effect on the Untreated (ATU)
+local command "command( Counterfactual_Treated=r(mu_1) Observed_Untreated=r(mu_2) Difference=r(mu_1)-r(mu_2) pvalue=r(p) "
+
+table (command) (result),  ///
+    `command' : ttest Emz_h_3_4 == Emz_h_4_4 ) ///
+    `command' : ttest Emz_h_1_4 == Emz_h_4_4 ) ///
+    `command' : ttest Emz_h_2_4 == Emz_h_4_4 )
+
+collect style cell result[Counterfactual_Treated Observed_Untreated Difference], nformat(%10.2f)
+collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
+collect style putdocx, layout(autofitcontents)
+collect export HDDSATU_Conditional.docx, as(docx) replace
+
+
+
+**#PART 8: Cross-regime heterogeneity comparisons
+local command "command( RegimeA=r(mu_1) RegimeB=r(mu_2) Difference=r(mu_1)-r(mu_2) pvalue=r(p) "
+
+table (command) (result), ///
+    `command' : ttest Emz_h_2_3 == Emz_h_1_3 ) ///
+    `command' : ttest Emz_h_2_1 == Emz_h_3_1 ) ///
+    `command' : ttest Emz_h_1_2 == Emz_h_3_2 )
+
+collect style cell result[RegimeA RegimeB Difference], nformat(%10.2f)
+collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
+collect style putdocx, layout(autofitcontents)
+collect export HDDSHeterogeneity_Comparisons.docx, as(docx) replace
+
+*============================================================*
+* Reviewer-style treatment effects table
+*============================================================*
+tempname memhold
+tempfile hdds_te
+
+postfile `memhold' ///
+    str20 treatment ///
+    double actual_treated ///
+    double cf_treated_none ///
+    double ATT ///
+    double pct_change ///
+    double cf_untreated_treated ///
+    double actual_untreated ///
+    double ATU ///
+    double BH1 ///
+    double BH2 ///
+    double TH ///
+    double p_ATT ///
+    double p_ATU ///
+    using `hdds_te', replace
+
+foreach j in 1 2 3 {
+
+    quietly summarize Emz_h_`j'_`j', meanonly
+    local actual_treated = r(mean)
+
+    quietly summarize Emz_h_4_`j', meanonly
+    local cf_treated_none = r(mean)
+
+    quietly summarize Emz_h_`j'_4, meanonly
+    local cf_untreated_treated = r(mean)
+
+    quietly summarize Emz_h_4_4, meanonly
+    local actual_untreated = r(mean)
+
+    local ATT = `actual_treated' - `cf_treated_none'
+    local ATU = `cf_untreated_treated' - `actual_untreated'
+    local BH1 = `actual_treated' - `cf_untreated_treated'
+    local BH2 = `cf_treated_none' - `actual_untreated'
+    local TH  = `ATT' - `ATU'
+
+    local pct_change = .
+    if `cf_treated_none' != 0 {
+        local pct_change = 100 * (`ATT' / `cf_treated_none')
+    }
+
+    quietly ttest Emz_h_`j'_`j' == Emz_h_4_`j'
+    local p_ATT = r(p)
+
+    quietly ttest Emz_h_`j'_4 == Emz_h_4_4
+    local p_ATU = r(p)
+
+    local treatlbl ""
+    if `j'==1 local treatlbl "FISP only"
+    if `j'==2 local treatlbl "SAPs only"
+    if `j'==3 local treatlbl "FISP + SAPs"
+
+    post `memhold' ///
+        ("`treatlbl'") ///
+        (`actual_treated') ///
+        (`cf_treated_none') ///
+        (`ATT') ///
+        (`pct_change') ///
+        (`cf_untreated_treated') ///
+        (`actual_untreated') ///
+        (`ATU') ///
+        (`BH1') ///
+        (`BH2') ///
+        (`TH') ///
+        (`p_ATT') ///
+        (`p_ATU')
+}
+
+postclose `memhold'
+
+preserve
+use `hdds_te', clear
+
+format actual_treated cf_treated_none ATT cf_untreated_treated actual_untreated ///
+       ATU BH1 BH2 TH %9.4f
+format pct_change %9.1f
+format p_ATT p_ATU %9.4f
+
+gen str4 ATT_star = cond(p_ATT<0.01,"***", cond(p_ATT<0.05,"**", cond(p_ATT<0.1,"*","")))
+gen str4 ATU_star = cond(p_ATU<0.01,"***", cond(p_ATU<0.05,"**", cond(p_ATU<0.1,"*","")))
+
+gen str15 ATT_disp = string(ATT,"%9.4f") + ATT_star
+gen str15 ATU_disp = string(ATU,"%9.4f") + ATU_star
+gen str12 pct_disp = string(round(pct_change,1),"%9.1f")
+
+order treatment actual_treated cf_treated_none ATT_disp pct_disp ///
+      cf_untreated_treated actual_untreated ATU_disp ///
+      BH1 BH2 TH p_ATT p_ATU
+
+putdocx clear
+putdocx begin
+putdocx paragraph, style(Heading1)
+putdocx text ("HDDS MESR Treatment Effects")
+
+putdocx table hdds = data( ///
+    treatment actual_treated cf_treated_none ATT_disp pct_disp ///
+    cf_untreated_treated actual_untreated ATU_disp ///
+    BH1 BH2 TH), varnames
+
+putdocx table hdds(.,.), halign(center)
+putdocx save "HDDS_treatment_effects.docx", replace
+
+restore
+

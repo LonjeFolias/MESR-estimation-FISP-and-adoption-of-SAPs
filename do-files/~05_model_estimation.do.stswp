@@ -280,7 +280,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 					ge Emz_p_`number'_3= 	Emz_p_`number' 	if 	combined_fisp_saps  ==3
 					ge Emz_p_`number'_2= 	Emz_p_`number' 	if 	combined_fisp_saps  ==2
 					ge Emz_p_`number'_1= 	Emz_p_`number'	if 	combined_fisp_saps  ==1
-					ge Emz_p_`number'_4=	Emz_p_`number'  if 	combined_fisp_saps  ==4
+					ge Emz_p_`number'_4=	(Emz_p_`number' + Emz_p_4)/2  if 	combined_fisp_saps  ==4
 			}
 			
 			if `number'==1 {
@@ -329,7 +329,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 		collect style cell result[chi2 p N], nformat(%8.2f)
 		collect style header result[chi2 p N], level(label)
 		collect style putdocx, layout(autofitcontents)
-		collect export "$result/productivity.docx", as(docx) replace
+		*collect export "$result/productivity.docx", as(docx) replace
 
 		collect clear
 		
@@ -376,7 +376,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 					ge Emz_f_`number'_3= 	Emz_f_`number' 	if 	combined_fisp_saps  ==3
 					ge Emz_f_`number'_2= 	Emz_f_`number' 	if 	combined_fisp_saps  ==2
 					ge Emz_f_`number'_1= 	Emz_f_`number'	if 	combined_fisp_saps  ==1
-					ge Emz_f_`number'_4=	Emz_f_`number'  if 	combined_fisp_saps  ==4
+					ge Emz_f_`number'_4=	(Emz_f_`number' + Emz_f_4)/2   if 	combined_fisp_saps  ==4
 			}
 			
 
@@ -389,7 +389,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 					ge Emz_f_`number'_3= 	Emz_f_`number' 	if 	combined_fisp_saps  ==3
 					ge Emz_f_`number'_2= 	Emz_f_`number' 	if 	combined_fisp_saps  ==2
 					ge Emz_f_`number'_1= 	Emz_f_`number'	if 	combined_fisp_saps  ==1
-					ge Emz_f_`number'_4=    Emz_f_`number' if 	combined_fisp_saps  ==4
+					ge Emz_f_`number'_4=	(Emz_f_`number' + Emz_f_4)/2   if 	combined_fisp_saps  ==4
 			}
 			
 			if `number'==1 {
@@ -438,7 +438,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 		collect style cell result[chi2 p N], nformat(%10.6f)
 		collect style header result[chi2 p N], level(label)
 		collect style putdocx, layout(autofitcontents)
-		collect export "$result/FCS1.docx", as(docx) replace
+		*collect export "$result/FCS1.docx", as(docx) replace
 		
 
 
@@ -458,8 +458,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 		*Selmlog estimation	
 		*The if are applying due to changes in the IV
 		
-				  collect _r_b _r_se, tag(model[(`number')]): selmlog HDDS`number' ///
-				  $foodsecurity_eq, select(combined_fisp_saps =  `selection_`number'') boot(300) dmf(0) gen(m`number')
+				  collect _r_b _r_se, tag(model[(`number')]): selmlog HDDS`number' $foodsecurity_eq, select(combined_fisp_saps =  `selection_`number'') boot(300) dmf(0) gen(m`number')
 				  
 			// Overall significance and Number of observetions 
 	// Overall significance and Number of observetions 
@@ -548,7 +547,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 		collect style cell result[chi2 p N], nformat(%10.6f)
 		collect style header result[chi2 p N], level(label)
 		collect style putdocx, layout(autofitcontents)
-		collect export "$result/HDDS1.docx", as(docx) replace
+		*collect export "$result/HDDS1.docx", as(docx) replace
 
 	
 	
@@ -764,16 +763,16 @@ foreach y of local outcomes {
     use `te_`y'', clear
 
     format actual_treated cf_treated_none ATT cf_untreated_treated actual_untreated ///
-           ATU BH1 BH2 TH %9.2f
-    format pct_change %9.2f
-    format p_ATT p_ATU %9.2f
+           ATU BH1 BH2 TH %9.4f
+    format pct_change %9.1f
+    format p_ATT p_ATU %9.4f
 
     gen str4 ATT_star = cond(p_ATT<0.01,"***", cond(p_ATT<0.05,"**", cond(p_ATT<0.1,"*","")))
     gen str4 ATU_star = cond(p_ATU<0.01,"***", cond(p_ATU<0.05,"**", cond(p_ATU<0.1,"*","")))
 
-    gen str15 ATT_disp = string(ATT,"%9.2f") + ATT_star
-    gen str15 ATU_disp = string(ATU,"%9.2f") + ATU_star
-    gen str12 pct_disp = string(round(pct_change,0.1),"%9.2f")
+    gen str15 ATT_disp = string(ATT,"%9.4f") + ATT_star
+    gen str15 ATU_disp = string(ATU,"%9.4f") + ATU_star
+    gen str12 pct_disp = string(round(pct_change,0.1),"%9.1f")
 
     order treatment actual_treated cf_treated_none ATT_disp pct_disp ///
           cf_untreated_treated actual_untreated ATU_disp ///

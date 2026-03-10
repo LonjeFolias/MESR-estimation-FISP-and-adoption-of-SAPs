@@ -193,3 +193,20 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 la var shock "if the HH exprienced shock in the past 3 agri. seasons"
 
 save "${workingfiles}/final esr data.dta", replace
+
+
+
+
+
+
+
+iecodebook template "${workingfiles}/final esr data.dta" ///
+    using "$result/codebook.xlsx" ///
+    , surveys( hh_level_data ) replace
+	
+iecodebook export ///
+    using "$result/codebook.xlsx", ///
+    replace 
+	
+	
+	

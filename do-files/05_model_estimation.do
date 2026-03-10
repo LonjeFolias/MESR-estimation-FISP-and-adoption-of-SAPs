@@ -24,7 +24,7 @@
 	/*
 	** OUTLINE:     
 		PART 0: Globals/Locals and Macros 
-		PART 1: Installing uncommon packages that this project requires
+		PART 1: Descriptives
 		PART 2: Objective 1 Models : Probit Models
 		PART 3: Robust Checks : Recursive bivariate probit regression
 		PART 4: Objective 2 :  Impact Evaluation through MESR Models
@@ -34,6 +34,13 @@
 		
 	*/
 
+	
+**********************************************************************
+**#PART 0: Globals/Locals and Macros 
+**********************************************************************
+
+
+***********Model macros
 global hh 			agesq  					gender 				educ 	hh_Size /// 
 marital2 marital3 marital4	TLU shock
 	
@@ -41,19 +48,24 @@ global institution	credit
 global weather		avr_yearly_pre2019 		avr_yearly_tmp2019	
 global farmlevel	type2 					type3 				quality2 	quality3
 
-*Model equations
+
 global foodsecurity_eq 		$hh 	off_farm		FGT0 com_cd71  	$institution 	$weather
 
-global fisp_eq 				$hh 	off_farm		FGT0	years_village	$institution 	mp 	drought		$weather 	IV_fisp_saps
-global saps 				$hh 	off_farm		FGT0	years_village	$institution 	mp	drought 	$weather 	$farmlevel		IV_fisp_saps
-global productivity			$hh 	    			FGT0   	years_village	$institution 		drought		$weather	$farmlevel
+global fisp_eq 				$hh 	off_farm		FGT0	years_village	$institution ///
+	mp 	drought		$weather 	IV_fisp_saps
+global saps 				$hh 	off_farm		FGT0	years_village	$institution ///
+	mp	drought 	$weather 	$farmlevel		IV_fisp_saps
+global productivity			$hh 	    			FGT0   	years_village	$institution  ///
+	drought		$weather	$farmlevel
 global outcome 				p		f 				h 
-global mprobit				$hh 	off_farm		FGT0	$institution 	$weather 	$farmlevel	 IV_fisp_saps
+global mprobit				$hh 	off_farm		FGT0	$institution 	$weather 	///
+$farmlevel	 IV_fisp_saps
 	 
 
-	 
+*************Descriptive macros	 
 global categorical 	gender 		FGT0 		extension				credit  ///
-type1  type2 		type3 		quality1 	quality2 				quality3 		drought 		box_ridges 				minimum_tillage 		///
+type1  type2 		type3 		quality1 	quality2 				quality3  ///
+drought 		box_ridges 				minimum_tillage 		///
 erosion_control_bunds 			vetiver 	plating_pits 			traditional_tilage ///
 Terraces Water_harvest_bunds 	agro_forestry  						none
 
@@ -63,33 +75,17 @@ global continous 	age 		educ 		hh_Size 				Plot_Area 	///
 output l_avr_yearly_tmp2019 	l_avr_yearly_pre2019  				IV_fisp 	///
 IV_saps IV_fisp_saps
 
+keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* HDDS* region district reside hh_wgt TAs fisp  saps type1 type2 type3 quality1 quality2 quality3 IV_fisp IV_saps IV_fisp_saps FGT0 $selection plating_pits traditional_tilage Terraces Water_harvest_bunds dry_season organic_fertilizer agro_forestry inorganic_fertilizer erosion_control_bunds vetiver box_ridges minimum_tillage type quality Plot_Area output 	avr_yearly_tmp2019 avr_yearly_pre2019 fisp_saps none IV_none $eq1 $eq2 $eq3 $eq4 l_* mp com_cd71 years_village harves* TLU off_farm FCS age* dependency drought FGT1  $saps  combined_fisp_saps marital1 marital2 marital3  marital4 shock extension dependency
 
 	*Svy Set 
 	svyset 	case_id 	[pweight= hh_wgt ], 	strata( ea_id ) 	singleunit(centered)
 	
 
-		g shock=.
-		
-		foreach i in drought floods {
-			replace shock=1 if `i'==1
-		}
-
-		recode shock (.=0)
-		
-		
-keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* HDDS* region district reside hh_wgt TAs fisp  saps type1 type2 type3 quality1 quality2 quality3 IV_fisp IV_saps IV_fisp_saps FGT0 $selection plating_pits traditional_tilage Terraces Water_harvest_bunds dry_season organic_fertilizer agro_forestry inorganic_fertilizer erosion_control_bunds vetiver box_ridges minimum_tillage type quality Plot_Area output 	avr_yearly_tmp2019 avr_yearly_pre2019 fisp_saps none IV_none $eq1 $eq2 $eq3 $eq4 l_* mp com_cd71 years_village harves* TLU off_farm FCS age* dependency drought floods FGT1  $saps  combined_fisp_saps marital1 marital2 marital3  marital4 shock extension dependency
 
 
-g combined=1 	if 		combined_fisp_saps==3
-
-foreach i in combined fisp saps none {
-		recode `i' (.=0)
-}
-
+**#PART 1: Descriptives
 
 /*
-**# Descritives
-
 	*Pooled
 	foreach i in continous {
 			table  ( var) (), statistic(mean $`i') statistic(sd $`i')  nformat(%9.2fc mean sd )  sformat("(%s)" sd)  
@@ -210,10 +206,19 @@ foreach i in combined fisp saps none {
 		esttab biprobit using Recursivefinal.rtf,   stats(chi2 p , labels("Wald chi" "Prob > chi2" ))  star(* 0.10 ** 0.05 *** 0.01) unstack r b(3) se(2)
 		*/
 
-**#PART 4: Objective 2 :  Impact Evaluation through MESR Models
-		
+**#PART 2: Objective 2 :  Impact Evaluation through MESR Models
+
+
+**## Installing selmlong ado file.
+
+/* This is a user-written command and should run ONLY ONCE at the
+	beginning of the do-file. Therefore, set the local 
+	`runningscript_firsttime` to "Yes" ONLY the first time you run 
+	the code. Replace it with "No" (or any other value) in subsequent runs.*/
+
 	*A suser written selmlog ado file
-	local runningscript_firsttime "Yes" //ARE YOU RUNNING THIS SCRIPT FOR THE FIRST TIME (After reopening Stata?)  Yes/No : Input the answer in the local below
+	local runningscript_firsttime "NO" // ARE YOU RUNNING THIS SCRIPT 
+	*FOR THE FIRST TIME (After reopening Stata?)  Yes/No : Input the answer in the local below
 	
 	if  "`runningscript_firsttime'"=="Yes" {
 		
@@ -225,12 +230,12 @@ foreach i in combined fisp saps none {
 		svyset 	case_id 	[pweight= hh_wgt ], 	strata( ea_id ) 	singleunit(centered)
 		
 		collect clear
+
+**## Productivity Model
 		
-	*Productivity Model
-		
-		foreach number in 4 1 2 3    { //a loop for efficiency
+			foreach number in 4 1 2 3    { //a loop for efficiency
 			
-			local 	selection_4			 IV_none
+			local 	selection_4			 IV_none 
 			local 	selection_3			 IV_fisp_saps drought mp extension educ 
 			local 	selection_1			 IV_fisp drought mp educ 
 			local 	selection_2			 IV_saps  educ 
@@ -239,7 +244,8 @@ foreach i in combined fisp saps none {
 		*Selmlog estimation	
 		*The if are applying due to changes in the IV
 			svyset 	case_id 	[pweight= hh_wgt ], 	strata( ea_id ) 	singleunit(centered)
-			collect _r_b _r_se, tag(model[(`number')]): selmlog productivity`number' $productivity	if productivity`number'>0 , select(combined_fisp_saps =  `selection_`number'') wls boot(300) dmf(0) mloptions(rrr level (95)) gen(m`number')	
+			collect _r_b _r_se, tag(model[(`number')]): selmlog productivity`number' $productivity ///
+			mp com_cd71 if productivity`number'>0 , select(combined_fisp_saps =  `selection_`number'')  boot(300) dmf(0)  gen(m`number')	
 		
 		 
 		 
@@ -332,27 +338,28 @@ foreach i in combined fisp saps none {
 		collect style putdocx, layout(autofitcontents)
 		collect export "$result/productivity.docx", as(docx) replace
 
-
-		
-		*/
-		
 		collect clear
-*FCS Models
+		
+
+**********************************************************************************
+**## FCS Model
+********************************************************************************
 		foreach 	number in 4 1 2 3   { //a loop for efficiency
 			
 				
 			local 	selection_4			 IV_none
-			local 	selection_3			 IV_fisp_saps drought mp extension educ 
+			local 	selection_3			 IV_fisp_saps avr_yearly_pre2019  mp extension educ 
 			local 	selection_1			 IV_fisp drought mp educ 
 			local 	selection_2			 IV_saps  educ 
 			
 		*Selmlog estimation	
 		*The if are applying due to changes in the IV
 		
-				 collect _r_b _r_se, tag(model[(`number')]): selmlog FCS`number' $foodsecurity_eq, select(combined_fisp_saps =  `selection_`number'') boot(300) dmf(0) gen(m`number')	
-
+				  collect _r_b _r_se, tag(model[(`number')]): selmlog FCS`number' $foodsecurity_eq, ///
+				  select(combined_fisp_saps =  `selection_`number'') boot(300) dmf(0) gen(m`number')
+				  
 			// Overall significance and Number of observetions 
-				// Overall significance and Number of observetions 
+	// Overall significance and Number of observetions 
 			test 		$foodsecurity_eq
 			local		chi2				`r(chi2)'
 			collect 	chi2 = r(value),	tag(model[(`number')]):  echo	`chi2'
@@ -365,19 +372,20 @@ foreach i in combined fisp saps none {
 			local 		N			 		`r(N)'
 			collect 	N= r(value),		tag(model[(`number')]):  echo	`N'
 		
-			//predicitons for average estimations
+			//predicitons for average treatment estimations
+
 			if `number'==4 {
 					rename 		m`number'3 		_m3
 					rename 		m`number'1 		_m1
 					rename 		m`number'2 		_m2
 					predict		y_bar_f_`number', xb
-					
 					ge Emz_f_`number'= 	( y_bar_f_`number' )
 					ge Emz_f_`number'_3= 	Emz_f_`number' 	if 	combined_fisp_saps  ==3
 					ge Emz_f_`number'_2= 	Emz_f_`number' 	if 	combined_fisp_saps  ==2
 					ge Emz_f_`number'_1= 	Emz_f_`number'	if 	combined_fisp_saps  ==1
 					ge Emz_f_`number'_4=	Emz_f_`number'  if 	combined_fisp_saps  ==4
 			}
+			
 
 			if `number'==3 {
 					rename 		m`number'4 		_m4
@@ -437,13 +445,15 @@ foreach i in combined fisp saps none {
 		collect style cell result[chi2 p N], nformat(%10.6f)
 		collect style header result[chi2 p N], level(label)
 		collect style putdocx, layout(autofitcontents)
-		collect export "$result/FCS.docx", as(docx) replace
+		collect export "$result/FCS1.docx", as(docx) replace
+		
 
 
-ok
-
+	
+**********************************************************************************
+**## HDDS Model
+********************************************************************************
 		collect clear
-*HDDS Models
 		foreach 	number in 4 1 2 3   { //a loop for efficiency
 			
 				
@@ -544,9 +554,12 @@ ok
 		collect style cell result[chi2 p N], nformat(%10.6f)
 		collect style header result[chi2 p N], level(label)
 		collect style putdocx, layout(autofitcontents)
-		collect export HDDS1.docx, as(docx) replace
+		collect export "$result/HDDS1.docx", as(docx) replace
 
-		
+	
+	
+	
+	
 		*Treatment effects
 		
 		

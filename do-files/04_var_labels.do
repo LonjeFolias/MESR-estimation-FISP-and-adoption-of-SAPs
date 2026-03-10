@@ -167,4 +167,29 @@ la var off_farm "Off farm actoivities"
 
 recode  com_cd71 (.=0)
 
+/*
+g combined=1 	if 		combined_fisp_saps==3
+
+foreach i in combined fisp saps none {
+		recode `i' (.=0)
+}
+*/
+
+la var combined "if the HH is both a fisp beneficiary and use saps "
+
+
+
+		g shock=.
+		
+		foreach i in drought floods {
+			replace shock=1 if `i'==1
+		}
+
+		recode shock (.=0)
+		
+		
+keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* HDDS* region district reside hh_wgt TAs fisp  saps type1 type2 type3 quality1 quality2 quality3 IV_fisp IV_saps IV_fisp_saps FGT0 $selection plating_pits traditional_tilage Terraces Water_harvest_bunds dry_season organic_fertilizer agro_forestry inorganic_fertilizer erosion_control_bunds vetiver box_ridges minimum_tillage type quality Plot_Area output 	avr_yearly_tmp2019 avr_yearly_pre2019 fisp_saps none IV_none $eq1 $eq2 $eq3 $eq4 l_* mp com_cd71 years_village harves* TLU off_farm FCS age* dependency drought floods FGT1  $saps  combined_fisp_saps marital1 marital2 marital3  marital4 shock extension dependency
+
+la var shock "if the HH exprienced shock in the past 3 agri. seasons"
+
 save "${workingfiles}/final esr data.dta", replace

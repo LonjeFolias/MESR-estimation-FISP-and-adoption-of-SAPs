@@ -1,8 +1,11 @@
 # Multinomial Endogenous Switching regression estimation
 
 This repository provides a complete empirical framework to evaluate the synergistic effects of FISP participation and SAP adoption on:
+
 •	Agricultural productivity
+
 •	Food security outcomes (Food Consumption Score – FCS, and Household Dietary Diversity Score – HDDS)
+
 The analysis is implemented using a Multinomial Endogenous Switching Regression (MESR) model to account for selection bias arising from households self-selecting into different treatment regimes.
 
 ## Overview

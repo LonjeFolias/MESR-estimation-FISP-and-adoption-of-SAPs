@@ -1,4 +1,5 @@
-   * ******************************************************************** *
+   * *
+******************************************************************* *
    * ******************************************************************** *
    *                                                                      *
    *               Farm input subsidies (FISP) and adoption of sustainable* 
@@ -152,4 +153,4 @@ if (0) {
 
 		do "$dofiles/01_data_cleaning.do" 
 		do "$dofiles/05_model_estimation.do" 
-
+		do "$dofiles/07_post_estimation_test.do"

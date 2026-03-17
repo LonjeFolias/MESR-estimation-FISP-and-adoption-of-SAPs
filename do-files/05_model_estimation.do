@@ -34,7 +34,7 @@
 
 
 ***********Model macros
-global hh 			agesq  					gender 				educ 	hh_Size /// 
+global hh 			  					gender 	agesq			educ 	hh_Size /// 
 marital2 marital3 marital4	TLU shock
 	
 global institution	credit
@@ -68,7 +68,7 @@ global continous 	age 		educ 		hh_Size 				Plot_Area 	///
 output l_avr_yearly_tmp2019 	l_avr_yearly_pre2019  				IV_fisp 	///
 IV_saps IV_fisp_saps
 
-keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* HDDS* region district reside hh_wgt TAs fisp  saps type1 type2 type3 quality1 quality2 quality3 IV_fisp IV_saps IV_fisp_saps FGT0 $selection plating_pits traditional_tilage Terraces Water_harvest_bunds dry_season organic_fertilizer agro_forestry inorganic_fertilizer erosion_control_bunds vetiver box_ridges minimum_tillage type quality Plot_Area output 	avr_yearly_tmp2019 avr_yearly_pre2019 fisp_saps none IV_none $eq1 $eq2 $eq3 $eq4 l_* mp com_cd71 years_village harves* TLU off_farm FCS age* dependency drought FGT1  $saps  combined_fisp_saps marital1 marital2 marital3  marital4 shock extension dependency
+*keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* HDDS* region district reside hh_wgt TAs fisp  saps type1 type2 type3 quality1 quality2 quality3 IV_fisp IV_saps IV_fisp_saps FGT0 $selection plating_pits traditional_tilage Terraces Water_harvest_bunds dry_season organic_fertilizer agro_forestry inorganic_fertilizer erosion_control_bunds vetiver box_ridges minimum_tillage type quality Plot_Area output 	avr_yearly_tmp2019 avr_yearly_pre2019 fisp_saps none IV_none $eq1 $eq2 $eq3 $eq4 l_* mp com_cd71 years_village harves* TLU off_farm FCS age* dependency drought FGT1  $saps  combined_fisp_saps marital1 marital2 marital3  marital4 shock extension dependency
 
 	*Svy Set 
 	svyset 	case_id 	[pweight= hh_wgt ], 	strata( ea_id ) 	singleunit(centered)
@@ -129,77 +129,378 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 	 	}
 	
 	
+*/	
 	
+**#PART 2: Objective 1 Models : Multinomial Probit Models 
+
+preserve
 	
-**#PART 2: Objective 1 Models : Probit Models 
-	collect 	clear
-	
+	/*******************************************************************************
+* CUSTOM MULTINOMIAL PROBIT TABLE
+* 3 outcomes x 3 columns each:
+*   Coef. (Std. err.) | Z-value | Dy/dx
+*
+* Stars ONLY on coefficients
+*******************************************************************************/
+
+clear matrix
+capture postclose mnp_post
+
+*--------------------------------------------------*
+* 0. Survey design
+*--------------------------------------------------*
+svyset case_id [pweight=hh_wgt], strata(ea_id) singleunit(centered)
+
+*--------------------------------------------------*
+* 1. Estimate model ONCE
+*--------------------------------------------------*
+quietly mprobit combined_fisp_saps $mprobit, baseoutcome(4)
+estimates store MNP
+
+local N     = e(N)
+local chi2  = e(chi2)
+local pchi2 = e(p)
+
+*--------------------------------------------------*
+* 2. Variables for table
+*    coefvars = names used to extract _b[] and _se[]
+*    mfxvars  = names used in margins, dydx()
+*
+*    These should match the actual covariates in $mprobit
+*--------------------------------------------------*
+local coefvars ///
+	gender ///
+    agesq ///
+    educ ///
+    hh_Size ///
+    marital2 ///
+    marital3 ///
+    marital4 ///
+    TLU ///
+    shock ///
+    off_farm ///
+    FGT0 ///
+    credit ///
+    avr_yearly_pre2019 ///
+    avr_yearly_tmp2019 ///
+    type2 ///
+    type3 ///
+    quality2 ///
+    quality3 ///
+    IV_fisp_saps
+
+local mfxvars ///
+    gender ///
+    agesq ///
+    educ ///
+    hh_Size ///
+    marital2 ///
+    marital3 ///
+    marital4 ///
+    TLU ///
+    shock ///
+    off_farm ///
+    FGT0 ///
+    credit ///
+    avr_yearly_pre2019 ///
+    avr_yearly_tmp2019 ///
+    type2 ///
+    type3 ///
+    quality2 ///
+    quality3 ///
+    IV_fisp_saps
+
+*--------------------------------------------------*
+* 3. Create results file
+*--------------------------------------------------*
+tempfile results
+postfile mnp_post ///
+    str100 varlabel ///
+    str40  coefse1 str15 z1 str15 dydx1 ///
+    str40  coefse2 str15 z2 str15 dydx2 ///
+    str40  coefse3 str15 z3 str15 dydx3 ///
+    using `results', replace
+
+*--------------------------------------------------*
+* 4. Marginal effects for each outcome
+*--------------------------------------------------*
+quietly estimates restore MNP
+quietly margins, dydx(`mfxvars') predict(pr outcome(1)) post
+matrix M1 = r(table)
+
+quietly estimates restore MNP
+quietly margins, dydx(`mfxvars') predict(pr outcome(2)) post
+matrix M2 = r(table)
+
+quietly estimates restore MNP
+quietly margins, dydx(`mfxvars') predict(pr outcome(3)) post
+matrix M3 = r(table)
+
+quietly estimates restore MNP
+
+*--------------------------------------------------*
+* 5. Loop through variables and post custom output
+*--------------------------------------------------*
+foreach v of local coefvars {
+
+    *---------------- outcome 1 ----------------*
+    local b1    .
+    local se1   .
+    local zval1 .
+    local p1    .
+
+    capture noisily local b1  = _b[1:`v']
+    capture noisily local se1 = _se[1:`v']
+
+    if `se1' < . & `se1' != 0 {
+        local zval1 = `b1'/`se1'
+        local p1    = 2*normal(-abs(`zval1'))
+    }
+
+    local star1 ""
+    if `p1' < . {
+        if      `p1' < 0.01 local star1 "***"
+        else if `p1' < 0.05 local star1 "**"
+        else if `p1' < 0.10 local star1 "*"
+    }
+
+    local coefse_1 ""
+    local z1s ""
+    local dydx_1 ""
+
+    if `b1' < . & `se1' < . {
+        local b1s  : display %9.4f `b1'
+        local se1s : display %9.3f `se1'
+        local coefse_1 `"`b1s'`star1'`=char(10)'(`se1s')'"'
+        local z1s      : display %6.2f `zval1'
+    }
+
+    local c1 = colnumb(M1, "`v'")
+    if `c1' < . {
+        local d1 = el(M1,1,`c1')
+        local dydx_1 : display %9.4f `d1'
+    }
+
+    *---------------- outcome 2 ----------------*
+    local b2    .
+    local se2   .
+    local zval2 .
+    local p2    .
+
+    capture noisily local b2  = _b[2:`v']
+    capture noisily local se2 = _se[2:`v']
+
+    if `se2' < . & `se2' != 0 {
+        local zval2 = `b2'/`se2'
+        local p2    = 2*normal(-abs(`zval2'))
+    }
+
+    local star2 ""
+    if `p2' < . {
+        if      `p2' < 0.01 local star2 "***"
+        else if `p2' < 0.05 local star2 "**"
+        else if `p2' < 0.10 local star2 "*"
+    }
+
+    local coefse_2 ""
+    local z2s ""
+    local dydx_2 ""
+
+    if `b2' < . & `se2' < . {
+        local b2s  : display %9.4f `b2'
+        local se2s : display %9.3f `se2'
+        local coefse_2 `"`b2s'`star2'`=char(10)'(`se2s')'"'
+        local z2s      : display %6.2f `zval2'
+    }
+
+    local c2 = colnumb(M2, "`v'")
+    if `c2' < . {
+        local d2 = el(M2,1,`c2')
+        local dydx_2 : display %9.4f `d2'
+    }
+
+    *---------------- outcome 3 ----------------*
+    local b3    .
+    local se3   .
+    local zval3 .
+    local p3    .
+
+    capture noisily local b3  = _b[3:`v']
+    capture noisily local se3 = _se[3:`v']
+
+    if `se3' < . & `se3' != 0 {
+        local zval3 = `b3'/`se3'
+        local p3    = 2*normal(-abs(`zval3'))
+    }
+
+    local star3 ""
+    if `p3' < . {
+        if      `p3' < 0.01 local star3 "***"
+        else if `p3' < 0.05 local star3 "**"
+        else if `p3' < 0.10 local star3 "*"
+    }
+
+    local coefse_3 ""
+    local z3s ""
+    local dydx_3 ""
+
+    if `b3' < . & `se3' < . {
+        local b3s  : display %9.4f `b3'
+        local se3s : display %9.3f `se3'
+        local coefse_3 `"`b3s'`star3'`=char(10)'(`se3s')'"'
+        local z3s      : display %6.2f `zval3'
+    }
+
+    local c3 = colnumb(M3, "`v'")
+    if `c3' < . {
+        local d3 = el(M3,1,`c3')
+        local dydx_3 : display %9.4f `d3'
+    }
+
+    *---------------- row labels ----------------*
+    local lab "`v'"
+
+    if "`v'" == "agesq"              local lab "Age squared"
+    if "`v'" == "gender"             local lab "Gender of the HH head"
+    if "`v'" == "educ"               local lab "Years of formal education of HH head"
+    if "`v'" == "hh_Size"            local lab "Household size (persons)"
+
+    if "`v'" == "marital2"           local lab "Marital status: Separated/Divorced"
+    if "`v'" == "marital3"           local lab "Marital status: Widowed"
+    if "`v'" == "marital4"           local lab "Marital status: Never married"
+
+    if "`v'" == "TLU"                local lab "Tropical Livestock Unit"
+    if "`v'" == "shock"              local lab "Household experienced shock (last 3 seasons)"
+
+    if "`v'" == "off_farm"           local lab "Off-farm activities"
+    if "`v'" == "FGT0"               local lab "Poverty headcount"
+    if "`v'" == "credit"             local lab "Access to credit"
+
+    if "`v'" == "avr_yearly_pre2019" local lab "Average yearly precipitation (2019)"
+    if "`v'" == "avr_yearly_tmp2019" local lab "Average yearly temperature (2019)"
+
+    if "`v'" == "type2"              local lab "Predominant soil: Loam"
+    if "`v'" == "type3"              local lab "Predominant soil: Clay"
+
+    if "`v'" == "quality2"           local lab "Soil quality: Fair"
+    if "`v'" == "quality3"           local lab "Soil quality: Poor"
+
+    if "`v'" == "IV_fisp_saps"       local lab "% HH that are FISP beneficiaries + SAP users in the EA"
+
+    post mnp_post ///
+        ("`lab'") ///
+        (`"`coefse_1'"') ("`z1s'") ("`dydx_1'") ///
+        (`"`coefse_2'"') ("`z2s'") ("`dydx_2'") ///
+        (`"`coefse_3'"') ("`z3s'") ("`dydx_3'")
+}
+
+postclose mnp_post
+use `results', clear
+
+*--------------------------------------------------*
+* 6. Add model statistics
+*--------------------------------------------------*
+local oldN = _N
+set obs `=`oldN' + 3'
+
+replace varlabel = "N"           in `=`oldN' + 1'
+replace coefse1  = string(`N',    "%12.0fc") in `=`oldN' + 1'
+
+replace varlabel = "LR Chi2"     in `=`oldN' + 2'
+replace coefse1  = string(`chi2', "%9.2f")   in `=`oldN' + 2'
+
+replace varlabel = "Prob > Chi2" in `=`oldN' + 3'
+replace coefse1  = string(`pchi2', "%6.4f")  in `=`oldN' + 3'
+
+*--------------------------------------------------*
+* 7. Export to Word
+*--------------------------------------------------*
+
+putdocx clear
+putdocx begin
+
+putdocx paragraph, halign(center)
+putdocx text ("Multinomial Probit Results"), bold
+
+local nrows = _N + 2
+putdocx table tbl = (`nrows', 10), layout(autofitcontents)
+
+
+* First header row
+* First header row without colspan
+putdocx table tbl(1,1)  = ("Variables"), bold
+putdocx table tbl(1,2)  = ("FISP_1 SAPs_0"), bold
+putdocx table tbl(1,3)  = (""), bold
+putdocx table tbl(1,4)  = (""), bold
+putdocx table tbl(1,5)  = ("FISP_0 SAPs_1"), bold
+putdocx table tbl(1,6)  = (""), bold
+putdocx table tbl(1,7)  = (""), bold
+putdocx table tbl(1,8)  = ("FISP_1 SAPs_1"), bold
+putdocx table tbl(1,9)  = (""), bold
+putdocx table tbl(1,10) = (""), bold
+
+* Second header row
+putdocx table tbl(2,1)  = ("")
+putdocx table tbl(2,2)  = ("Coef. (Std. err.)"), bold
+putdocx table tbl(2,3)  = ("Z-value"), bold
+putdocx table tbl(2,4)  = ("Dy/dx"), bold
+putdocx table tbl(2,5)  = ("Coef. (Std. err.)"), bold
+putdocx table tbl(2,6)  = ("Z-value"), bold
+putdocx table tbl(2,7)  = ("Dy/dx"), bold
+putdocx table tbl(2,8)  = ("Coef. (Std. err.)"), bold
+putdocx table tbl(2,9)  = ("Z-value"), bold
+putdocx table tbl(2,10) = ("Dy/dx"), bold
+
+* Fill body
+* Fill body
+forvalues i = 1/`=_N' {
+
+    local cell1  `"`=varlabel[`i']'"'
+    local cell2  `"`=coefse1[`i']'"'
+    local cell3  `"`=z1[`i']'"'
+    local cell4  `"`=dydx1[`i']'"'
+    local cell5  `"`=coefse2[`i']'"'
+    local cell6  `"`=z2[`i']'"'
+    local cell7  `"`=dydx2[`i']'"'
+    local cell8  `"`=coefse3[`i']'"'
+    local cell9  `"`=z3[`i']'"'
+    local cell10 `"`=dydx3[`i']'"'
+
+    local r = `i' + 2
+
+    putdocx table tbl(`r',1)  = ("`cell1'")
+    putdocx table tbl(`r',2)  = ("`cell2'")
+    putdocx table tbl(`r',3)  = ("`cell3'")
+    putdocx table tbl(`r',4)  = ("`cell4'")
+    putdocx table tbl(`r',5)  = ("`cell5'")
+    putdocx table tbl(`r',6)  = ("`cell6'")
+    putdocx table tbl(`r',7)  = ("`cell7'")
+    putdocx table tbl(`r',8)  = ("`cell8'")
+    putdocx table tbl(`r',9)  = ("`cell9'")
+    putdocx table tbl(`r',10) = ("`cell10'")
+}
+
+putdocx paragraph
+*putdocx text("Notes: Standard errors are in parentheses. *, **, *** denote significance at the 10%, 5%, and 1% levels, respectively. Stars are attached only to coefficients, not marginal effects."*)
+
+putdocx text ("Notes: "), bold
+putdocx text ("Standard errors are in parentheses. *, **, *** denote significance at the 10%, 5%, and 1% levels, respectively. Stars are attached only to coefficients, not marginal effects.")
+
+*putdocx save "$result/Multinomial_Probit_Custom.docx", replace
+
+restore
 	
 
-	collect clear 
-	svyset 	case_id 	[pweight= hh_wgt ], 	strata( ea_id ) 	singleunit(centered)
-	
-	collect get _r_b _r_se _r_z _r_p, tag(model[(all)]): mprobit combined_fisp_saps  $mprobit , baseoutcome(4)
-	etable,  stars(.05 "*" .01 "**", attach(_r_b))
-	
-	collect style cell result[_r_se], nformat(%6.3f) 	halign(center)
-	collect style cell result[_r_b ], nformat(%12.4f) 	halign(center)
-	collect style cell result[_r_z ], nformat(%5.2f) 	halign(center)
-	collect stars 	_r_p 0.01 "***" 0.05 "**" 0.1 "*" 1  " ", attach(_r_b) 
-	collect composite  define meansd =  _r_b _r_se
-	collect layout   (colname[]) (coleq#etable_depvar#stars[value]#result[meansd _r_z])
-	collect style      showbase  off
-	collect style 	   cell 	border_block, 	border(right, pattern(nil))  
-	collect levelsof 	cell_type
-	collect style		cell 	cell_type[item column-header], halign(center)
-	collect style 		header 	result, level(hide)
-	collect style 		row 	stack, spacer delimiter(" x ")
-	collect style 		putdocx, layout(autofitcontents)
-	collect export 		Multinomialprobitfirst.docx, as(docx) replace
-
-	
-	collect clear 
-	*Collection of the _r_b _r_se _r_z
-	collect get _r_b _r_se _r_z _r_p, tag(model[(all)]): mprobit combined_fisp_saps  $mprobit, baseoutcome(4)
-	etable
-	etable, replay showstars showstarsnote  stars(.05 "*" .01 "**" .001 "***", attach(_r_b))
-	collect export 		Multinomialprobitfirststars.docx, as(docx) replace
-	
-	
-	collect clear
-	foreach 	dependent	in	1 2 3 {
-		mprobit combined_fisp_saps  $mprobit, baseoutcome(4)
-		collect get _r_b _r_p , tag(model[(`dependent')]):  margins, predict(pr outcome(`dependent')) dydx(*)  post
-	}
-
-		*Exporting 	margins into word document
-		collect style cell result[_r_b ], nformat(%12.5f) halign(center)
-		collect style cell result[_r_se], sformat("(%s)")
-		collect stars 	_r_p 0.01 "***" 0.05 "**" 0.1 "*" 1  " ", attach(_r_b) 
-		collect layout   (colname) (cmdset#result[_r_b])
-		collect style      showbase  off
-		collect style 	   cell 	border_block, 	border(right, pattern(nil))  
-		collect levelsof 	cell_type
-		collect style		cell 	cell_type[item column-header], halign(center)
-		collect style 		header 	result, level(hide)
-		collect style 		row 	stack, spacer delimiter(" x ")
-		collect style 		putdocx, layout(autofitcontents)
-		collect export 		Multinomialdydx.docx, as(docx) replace
-		
-	
-	
-	
-	
 **#PART 3: Robust Checks : bivariate probit regression
 		
 		est clear
 		biprobit (fisp $fisp_eq) (saps $saps),  vce(robust)
 		est sto biprobit
 		
-		esttab biprobit using Recursivefinal.rtf,   stats(chi2 p , labels("Wald chi" "Prob > chi2" ))  star(* 0.10 ** 0.05 *** 0.01) unstack r b(3) se(2)
+		esttab biprobit using "$result/Recursivefinal.rtf",   stats(chi2 p , labels("Wald chi" "Prob > chi2" ))  star(* 0.10 ** 0.05 *** 0.01) unstack r b(3) se(2)
 		*/
 
-**#PART 2: Objective 2 :  Impact Evaluation through MESR Models
+**#PART 3: Objective 2 :  Impact Evaluation through MESR Models
 
 
 **## Installing selmlong ado file.
@@ -210,7 +511,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 	the code. Replace it with "No" (or any other value) in subsequent runs.*/
 
 	*A suser written selmlog ado file
-	local runningscript_firsttime "NO" // ARE YOU RUNNING THIS SCRIPT 
+	local runningscript_firsttime "Yes" // ARE YOU RUNNING THIS SCRIPT 
 	*FOR THE FIRST TIME (After reopening Stata?)  Yes/No : Input the answer in the local below
 	
 	if  "`runningscript_firsttime'"=="Yes" {
@@ -329,8 +630,8 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 		collect style cell result[chi2 p N], nformat(%8.2f)
 		collect style header result[chi2 p N], level(label)
 		collect style putdocx, layout(autofitcontents)
-		collect export "$result/productivity.docx", as(docx) replace
-
+		*collect export "$result/productivity.docx", as(docx) replace
+ok
 		collect clear
 		
 
@@ -438,7 +739,7 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 		collect style cell result[chi2 p N], nformat(%10.6f)
 		collect style header result[chi2 p N], level(label)
 		collect style putdocx, layout(autofitcontents)
-		collect export "$result/FCS1.docx", as(docx) replace
+		*collect export "$result/FCS1.docx", as(docx) replace
 		
 
 
@@ -548,12 +849,12 @@ keep case_id hh_wgt ea_id gender $FoodSecurity_eq  $mprobit productivity* FCS* H
 		collect style cell result[chi2 p N], nformat(%10.6f)
 		collect style header result[chi2 p N], level(label)
 		collect style putdocx, layout(autofitcontents)
-		collect export "$result/HDDS1.docx", as(docx) replace
+		*collect export "$result/HDDS1.docx", as(docx) replace
 
 	
 	
 /**********************************************************************
-PART 5–8: Treatment effects for MESR results in a loop
+ Treatment effects for MESR results in a loop
 Works with variables already created in your code:
     Productivity : Emz_p_*
     FCS          : Emz_f_*
@@ -566,7 +867,7 @@ Treatment regimes:
 **********************************************************************/
 
 *============================================================*
-**# PART 3:  Treatment effects
+**# PART 4:  Treatment effects
 *============================================================*
 
 
@@ -591,7 +892,7 @@ Treatment regimes:
     collect style cell result[pvalue], nformat(%10.4f)
     collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
     collect style putdocx, layout(autofitcontents)
-    collect export "$result/Unconditional_Mean_Differences.docx", as(docx) replace
+    *collect export "$result/Unconditional_Mean_Differences.docx", as(docx) replace
 	
 	
 	*============================================================*
@@ -615,7 +916,7 @@ Treatment regimes:
     collect style cell result[pvalue], nformat(%10.4f)
     collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
     collect style putdocx, layout(autofitcontents)
-    collect export "$result/ATT_Conditional.docx", as(docx) replace
+    *collect export "$result/ATT_Conditional.docx", as(docx) replace
 	
 	
 	*============================================================*
@@ -639,7 +940,7 @@ Treatment regimes:
     collect style cell result[pvalue], nformat(%10.4f)
     collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
     collect style putdocx, layout(autofitcontents)
-    collect export "$result/ATU_Conditional.docx", as(docx) replace
+    *collect export "$result/ATU_Conditional.docx", as(docx) replace
 	
 	
 	 *============================================================*
@@ -663,7 +964,7 @@ Treatment regimes:
     collect style cell result[pvalue], nformat(%10.4f)
     collect stars pvalue 0.01 "***" 0.05 "**" 0.1 "*" 1 " ", attach(Difference)
     collect style putdocx, layout(autofitcontents)
-    collect export "$result/Heterogeneity_Comparisons.docx", as(docx) replace
+    *collect export "$result/Heterogeneity_Comparisons.docx", as(docx) replace
 
 	
 	
@@ -790,6 +1091,6 @@ foreach y of local outcomes {
         BH1 BH2 TH), varnames
 
     putdocx table te(.,.), halign(center)
-    putdocx save "$result/`yname'_treatment_effects.docx", replace
+    *putdocx save "$result/`yname'_treatment_effects.docx", replace
     restore
 }

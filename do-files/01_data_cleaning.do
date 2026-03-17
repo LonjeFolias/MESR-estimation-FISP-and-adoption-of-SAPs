@@ -16,7 +16,7 @@ global ihsvlock   ihsv // a lock to apply for 	IHS5 only
    
 	
 foreach IHSnumber in  ihsv  {			
-**# 										 Household Charecters
+**# Bookmark #1
 use "${`IHSnumber'}/hh_mod_b.dta", clear 
 		
 		

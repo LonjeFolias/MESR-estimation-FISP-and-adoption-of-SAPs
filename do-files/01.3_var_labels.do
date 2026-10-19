@@ -1,5 +1,35 @@
+******************************************************************************
+*                                                                            *
+*  Study: Farm input subsidies (FISP) and adoption of sustainable            *
+*  agricultural practices in Malawi: synergies and implications on farm      *
+*  productivity and household resilience to food shocks                      *
+*                                                                            *
+*  File: 01.3_var_labels.do                                                  *
+*  Role: Legacy variable construction and labelling support                  *
+*  Author: Lonjezo Erick Folias                                              *
+*  Email: lonjefolias@hotmail.com                                            *
+*  Phone: 0992 888 003                                                       *
+*  Documentation revision: 19 October 2026                                   *
+*                                                                            *
+*  Purpose: Constructs regime-specific variables, applies labels and         *
+*  produces a codebook.                                                      *
+*                                                                            *
+*  Inputs: Household dataset in memory and project path globals.             *
+*                                                                            *
+*  Outputs: Working/final datasets and $result/codebook.xlsx.                *
+*                                                                            *
+*  Run order: Called internally during cleaning; this is not a labels-only   *
+*  script.                                                                   *
+*                                                                            *
+*  Notes: Executable label commands and its existing keep, recode and save   *
+*  commands are preserved. It is distinct from missing 004_labels.do.        *
+*                                                                            *
+******************************************************************************
 
 
+******************************************************************************
+**# CLEANING SUPPORT: CALLED BY 01_data_cleaning.do
+******************************************************************************
 global socio 		age 		gender 		educ 					hh_Size
 global insitutional extension 	credit	
 global farmlevel 	type2 		type3 		quality2 				quality3

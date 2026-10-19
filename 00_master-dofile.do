@@ -1,43 +1,34 @@
-   * *
-******************************************************************* *
-   * ******************************************************************** *
-   *                                                                      *
-   *               Farm input subsidies (FISP) and adoption of sustainable* 
-   *               agricultural practices in Malawi: synergies and		  * 
-   *               implications on farm productivity and household		  * 
-   *               resilience to food shocks                              *
-   *																	  *
-   *               Model Estimation  DO_FILE : This do file estimates 	  *
-   *			   1)Probit Models to determine factors influencing       *
-   *			   farmers' adoption/participation of the coupling        *
-   *			   of FISP with SAPs.                                     *
-   *   			   2) estimates the Selectivity-corrected Multinomial     *
-   *			   Endogenous Switching Probit (MNESR) model to quantify  *
-   *			   the impacts of coupling of FISP with SAPs on           *
-   *               productivity and food security                         *
-   *               														  *                                
-   *				Author : Lonjezo Erick Folias                         *
-   *				Number : 0992 888 003   							  *
-   *				Email  : lonjefolias@hotmail.com					  *
-   * ******************************************************************** *
-   * ******************************************************************** *
+******************************************************************************
+*                                                                            *
+*  Study: Farm input subsidies (FISP) and adoption of sustainable            *
+*  agricultural practices in Malawi: synergies and implications on farm      *
+*  productivity and household resilience to food shocks                      *
+*                                                                            *
+*  File: 00_master-dofile.do                                                 *
+*  Role: Master entry point                                                  *
+*  Author: Lonjezo Erick Folias                                              *
+*  Email: lonjefolias@hotmail.com                                            *
+*  Phone: 0992 888 003                                                       *
+*  Documentation revision: 19 October 2026                                   *
+*                                                                            *
+*  Purpose: Defines user paths and controls which project stages run.        *
+*                                                                            *
+*  Inputs: Local project folder, GitHub clone and required source files.     *
+*                                                                            *
+*  Outputs: Folder globals; execution of enabled stages.                     *
+*                                                                            *
+*  Run order: Run first. Cleaning is enabled; estimation is disabled in      *
+*  this supplied version.                                                    *
+*                                                                            *
+*  Notes: Installation block remains disabled. See README for prerequisites  *
+*  and stage switches.                                                       *
+*                                                                            *
+******************************************************************************
 
-
-   * ******************************************************************** *
-   *
-   **#       PART 0:  INSTALL PACKAGES AND STANDARDIZE SETTINGS
-   *
-   *           - Install packages needed to run all dofiles called
-   *            by this master dofile.
-   *           - Use ieboilstart to harmonize settings across users
-   *
-   * ******************************************************************** *
-
-*folder*0*End_StandardSettings************************************************
-*folder will not work properly if the line above is edited
-
-   *Install all packages that this project requires:
-   *(Note that this never updates outdated versions of already installed commands, to update commands use adoupdate)
+******************************************************************************
+**# PART 0: OPTIONAL PACKAGE INSTALLATION
+******************************************************************************
+* Supplied installation block is disabled; see README for dependencies.
 if (0) {
    local user_commands winsor factortest ietoolkit iefieldkit 	movestay asdoc rbiprobit  estout  ///
    codebookout ietoolkit iefieldkit geoplot schemepack palettes ///
@@ -56,11 +47,11 @@ if (0) {
 
    * ******************************************************************** *
    *
-   **#       PART 1:  PREPARING FOLDER PATH GLOBALS
+   **#       PART 1: PROJECT AND DATA PATH GLOBALS
    *
-   *           - Set the global box to point to the project folder
+   *           - Set projectfolder to the local data project root
    *            on each collaborator's computer.
-   *           - Set other locals that point to other folders of interest.
+   *           - Set github to the directory containing the repository clone.
    *
    * ******************************************************************** *
 
@@ -136,21 +127,37 @@ if (0) {
 
    * ******************************************************************** *
    *
-   **#       PART 3: - RUN DOFILES CALLED BY THIS MASTER DOFILE
+   **#       PART 2: EXECUTION SWITCHES FOR CLEANING AND ESTIMATION
    *
-   *           - When survey rounds are added, this section will
-   *            link to the master dofile for that round.
-   *           - The default is that these dofiles are set to not
-   *            run. It is rare that all round-specfic master dofiles
-   *            are called at the same time; the round specific master
-   *            dofiles are almost always called individually. The
-   *            exception is when reviewing or replicating a full project.
+   *           - Cleaning is enabled in the supplied master.
+   *           - Estimation is disabled until its switch is changed to 1.
+   *           - Keep stage switches separate from installation.
    *
    * ******************************************************************** *
 
 *folder*3*End_RunDofiles******************************************************
 *folder will not work properly if the line above is edited
 
+* Current sequence: 01_data_cleaning.do, then 02_MESR_main.do.
+* Estimation loads 02.1_MESR_programs.do automatically.
+		
+		
+*Change the if to 1 if you want to run a specific function through the do file 
+
+		* Cleaning stage: enabled in the supplied master (if 1). 
+ if (1) {
+ 	
 		do "$dofiles/01_data_cleaning.do" 
-		do "$dofiles/05_model_estimation.do" 
-		do "$dofiles/07_post_estimation_test.do"
+ }
+		
+		
+		* Estimation stage: disabled in the supplied master (if 0). 
+ if (0) {
+	do "$dofiles/02_MESR_main.do"
+ }
+******************************************************************************
+**# OPTIONAL: ALTERNATIVE OUTCOME DISTRIBUTION GRAPHS
+******************************************************************************
+* Run only after the main estimation has saved its analysis sample.
+* This example remains commented and does not change master execution.
+* do "$dofiles/03_graphs.do" "$result/MESR_analysis_sample_10_15.dta" "$result"

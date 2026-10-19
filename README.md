@@ -1,103 +1,142 @@
-# Multinomial Endogenous Switching regression estimation
+# Farm input subsidies and sustainable agricultural practices in Malawi
 
-This repository provides a complete empirical framework to evaluate the synergistic effects of FISP participation and SAP adoption on:
-•	Agricultural productivity
-•	Food security outcomes (Food Consumption Score – FCS, and Household Dietary Diversity Score – HDDS)
-The analysis is implemented using a Multinomial Endogenous Switching Regression (MESR) model to account for selection bias arising from households self-selecting into different treatment regimes.
+Stata research code for **Farm input subsidies (FISP) and adoption of sustainable agricultural practices in Malawi: synergies and implications on farm productivity and household resilience to food shocks**.
 
-## Overview
+The study examines FISP participation and adoption of sustainable agricultural practices among maize-growing households. It profiles four regimes, studies their determinants, and estimates regime-specific outcomes and counterfactual comparisons for maize productivity and household food security.
 
-The codebase is organized around a replication-style workflow that:
-1. prepares folder globals and project settings,
-2. cleans and merges source data,
-3. constructs variables,
-4. estimates multinomial treatment-selection and MESR models, and
-5. runs post-estimation instrument diagnostics.
+**Author:** Lonjezo Erick Folias  
+**Contact:** lonjefolias@hotmail.com
 
-## Research focus
+## Research design
 
-The empirical setup evaluates four treatment regimes:
-- FISP only
-- SAPs only
-- FISP + SAPs
-- Neither FISP nor SAPs (reference category)
+| Code | FISP | SAP adoption | Regime |
+|---|---|---|---|
+| 1 | Yes | No | FISP only |
+| 2 | No | Yes | SAPs only |
+| 3 | Yes | Yes | FISP and SAPs |
+| 4 | No | No | Neither — reference category |
 
-The main outcomes are:
-- agricultural productivity,
-- Food Consumption Score (FCS), and
-- Household Dietary Diversity Score (HDDS).
+SAP adoption in the active cleaner covers six soil and water conservation practices: box/tied ridges, erosion-control bunds, vetiver, planting pits, terraces and water-harvesting bunds. Outcomes are maize productivity, the dietary diversity measure stored as `HDDS`, and the Food Consumption Score (`FCS`). The title does not imply that these scripts directly estimate dynamic resilience to shocks.
 
-## Repository structure
+The estimation workflow includes:
 
-```text
-.
-├── 00_master-dofile.do
-└── do-files/
-    ├── 01_data_cleaning.do
-    ├── 02_expenditure.do
-    ├── 03_ihsvclimate.do
-    ├── 04_var_labels.do
-    ├── 05_model_estimation.do
-    ├── 06_selmlog.do
-    └── 07_post_estimation_test.do
+1. Regime profiles and unconditional outcome differences.
+2. **Multinomial probit** participation determinants and average marginal effects.
+3. A **multinomial logit first stage** and regime-specific continuous-outcome regressions with **DMF(0) correction** for multinomial endogenous switching regression (MESR).
+4. ATT, ATU, ATE, heterogeneity measures and coupled-versus-standalone comparisons.
+5. Excluded-variable relevance/falsification tests and probability-overlap diagnostics.
+
+The descriptive probit and MESR logit first stage have different roles. The current helper is bundled; the active main file does not call archived `selmlog`. The current excluded variables are extension-officer distance above 5 km and radio advice on pit planting; including them in the code does not itself establish exclusion validity.
+
+## File sequence
+
+| Stage | File | Execution |
+|---|---|---|
+| **00** | [`00_master-dofile.do`](00_master-dofile.do) | Set paths and choose stages. Main entry point. |
+| **01** | [`01_data_cleaning.do`](do-files/01_data_cleaning.do) | Constructs the analysis data. Called by the master. |
+| 01.1 | [`01.1_expenditure.do`](do-files/01.1_expenditure.do) | Called inside cleaning; do not run independently. |
+| 01.2 | [`01.2_ihsvclimate.do`](do-files/01.2_ihsvclimate.do) | Called inside cleaning; do not run independently. |
+| 01.3 | [`01.3_var_labels.do`](do-files/01.3_var_labels.do) | Construction/labels/codebook helper called inside cleaning. |
+| **02** | [`02_MESR_main.do`](do-files/02_MESR_main.do) | Estimation and Word results. Loads 02.1 automatically. |
+| **02.1** | [`02.1_MESR_programs.do`](do-files/02.1_MESR_programs.do) | Program definitions; not an independent analysis. |
+| **03** | [`03_graphs.do`](do-files/03_graphs.do) | Optional alternative distribution figures. |
+
+**The supplied master runs cleaning only. Installation and estimation remain switched off.** Decimal numbering identifies helpers, not an instruction to run all files in sorted order.
+
+## Setup
+
+### Local paths
+
+Clone the repository. In the user-1 block of the master, update:
+
+```stata
+global projectfolder "C:/path/to/AERC 2026"
+global github        "C:/path/to/GitHub"
 ```
 
-### File guide
+`github` is the **parent directory containing the clone** named `MESR-estimation-FISP-and-adoption-of-SAPs`, not the clone itself. The master constructs `$dofiles` from it. Only user 1 currently has an implemented path block.
 
-#### `00_master-dofile.do`
-Main entry point. Sets project globals, defines user-specific local paths, and runs the main workflow scripts.
+| Project path | Contents |
+|---|---|
+| `data/01_raw/ihs/MWI_2019_IHS-V_v06_M_Stata` | Raw IHS5 Stata modules and conversion factors. |
+| `data/01_raw/weather` | CRU inputs including `cru_pre_2.csv` and `cru_tmp_2.csv`. |
+| `data/02_workingfiles` | Working data, final analysis data and cleaning audits. |
+| `data/03_final` | Defined by the master; the current cleaner actually saves the final analysis data in `02_workingfiles`. |
+| `result` | Tables, graphs, estimates, logs and draws. |
 
-#### `do-files/01_data_cleaning.do`
-Builds the analytical dataset from LSMS/IHS household and agricultural modules. Based on the script contents, it:
+Create working/result directories before cleaning; the master defines paths but does not create every directory. Raw data are not included. Obtain IHS5 and its documentation from the [NSO/World Bank catalogue](https://microdata.worldbank.org/catalog/3818), subject to the catalogue's access conditions.
 
-- constructs household-head characteristics,
-- computes household composition and dependency measures,
-- merges education, location, community, and shock data,
-- builds food security indicators such as FCS and HDDS,
-- merges expenditure aggregates from `02_expenditure.do`,
-- prepares extension, credit, subsidy, land, and livestock variables, and
-- saves intermediate working files.
+### Required final labels file
 
-#### `do-files/02_expenditure.do`
-Constructs expenditure aggregates from multiple household consumption modules, including food, weekly non-food, monthly non-food, quarterly non-food, annual expenditures, durable goods, farm machinery, education, health, and housing.
+**Full cleaning requires your existing `do-files/004_labels.do`.** The supplied cleaner calls it, but it was not attached or present in the repository. The call is preserved. Do not substitute `01.3_var_labels.do`: that is a different, earlier step. Until the actual final-label script is supplied locally, this is not a complete clean-from-raw replication bundle.
 
-#### `do-files/03_ihsvclimate.do`
-Processes climate data derived from CRU time-series files. The script documentation notes restructuring precipitation and temperature data, creating climate variables, and aligning longitude/latitude structure with LSMS household geovariables.
+### Stata and commands
 
-#### `do-files/04_var_labels.do`
-Appears to prepare regime-specific variables and supporting labels for the estimation stage.
+Use **Stata 17 or later** for the full pipeline: cleaning declares version 17. Main estimation, helpers and graphs declare version 16.
 
-#### `do-files/05_model_estimation.do`
-Core estimation file. It:
-- estimates a multinomial probit treatment-selection model,
-- prepares a custom formatted multinomial probit results table with coefficients, standard errors, z-values, and marginal effects,
-- calls the user-written `selmlog` routine for MESR estimation, and
-- computes treatment-effect quantities such as ATT, ATU, and related heterogeneity terms.
+Cleaning calls user-written commands including `winsor2`, `zscore` and `iecodebook` from `iefieldkit`. Check/install these before running:
 
-#### `do-files/06_selmlog.do`
-Contains the user-written `selmlog` program used to estimate the switching-regression framework.
+```stata
+ssc install winsor2
+ssc install zscore
+ssc install iefieldkit
+```
 
-#### `do-files/07_post_estimation_test.do`
-Runs IV diagnostics after estimation. The file includes:
-- a relevance test for excluded instruments in the treatment-selection equation,
-- auxiliary regime-specific binary relevance checks,
-- exclusion-restriction tests in the outcome equations, and
-- stronger falsification checks among non-participants only.
+The master's older package list is preserved and disabled; it does not guarantee installation of all cleaning dependencies. Active MESR estimation/helper commands are built-in Stata commands.
 
-## Data requirements
+## Running the workflow
 
-The repository does **not** include raw data. From the master and cleaning scripts, the code expects local access to:
-- Malawi IHS/LSMS-style household and agricultural data,
-- CRU-based climate data converted to CSV,
-- a local working-data folder structure under a project directory, and
-- a local clone path used to point Stata to the `do-files` folder.
+### Cleaning and estimation
 
-Before running the code, update the user-specific path globals in `00_master-dofile.do` so that `projectfolder`, `github`, `rawdata`, `workingfiles`, `finaldata`, `weather`, and `dofiles` point to valid locations on your machine.
+The master's execution section retains cleaning `if (1)` and estimation `if (0)`. When ready to estimate, change the **estimation** switch to `if (1)` and run:
 
-## Contact
-**Lonjezo Erick Folias**  
-Email: lonjefolias@hotmail.com
+```stata
+do "C:/path/to/GitHub/MESR-estimation-FISP-and-adoption-of-SAPs/00_master-dofile.do"
+```
 
----
+To use an existing clean dataset, set the cleaning switch to `if (0)`. Then enable estimation in the master, or run the master to define paths and subsequently run:
 
-If you use this repository, cite the underlying paper/project and describe any local path or data adjustments you made for reproducibility.
+```stata
+do "$dofiles/02_MESR_main.do"
+```
+
+The main file uses `$data`, falling back to `$workingfiles` if `$data` is empty. It first looks for `final_esr_data.dta`, then `final esr data.dta`, the name saved by the cleaner. **If both exist, the underscore version takes precedence.** Ensure the intended file and `$data` are consistent.
+
+The main file automatically loads `02.1_MESR_programs.do`. Supplied settings remain **500 bootstrap replications**, `rerun_bootstrap = 1`, and `effect_mode = "legacy"`. The update does not change estimation or treatment-effect calculations.
+
+### Optional graphs
+
+The main estimator already writes its distribution and overlap figures. For the alternative graph style, use its saved analysis sample:
+
+```stata
+do "$dofiles/03_graphs.do" "$result/MESR_analysis_sample_10_15.dta" "$result"
+```
+
+Or use an in-memory analysis sample with `regime` already defined:
+
+```stata
+do "$dofiles/03_graphs.do"
+```
+
+This exports PNG/PDF figures. It only appends to Word if a document is already open; it does not save its own Word report. Plotting the full clean dataset can produce a different sample from the estimation tables.
+
+## Outputs
+
+- **`$result/MESR_tables_10_15.docx`** — main/appendix tables and embedded figures.
+- `Fig2_outcomes_10_15.png` and `Fig3_overlap_10_15.png` under `$result`.
+- `$result/MESR_analysis_sample_10_15.dta` — estimation sample.
+- `$result/MNP_10_15.ster`, `MNL_10_15.ster`, `MESR_main_trap_10_15.ster` — stored estimates.
+- `$result/MESR_main_draws_10_15.dta` — bootstrap draws.
+- `$workingfiles/final esr data.dta` and cleaning audit files.
+
+Original `10_15` output suffixes are retained. See the [file guide](docs/FILE_GUIDE.md) for outputs and table numbering. A separate robustness driver referenced in the former header was not uploaded and does not run automatically.
+
+## Documentation and historical versions
+
+[`docs/FILE_GUIDE.md`](docs/FILE_GUIDE.md) explains file roles and dependencies. [`docs/DOCUMENTATION_CHANGES.md`](docs/DOCUMENTATION_CHANGES.md) records the source mapping and scope; [`docs/VERIFICATION.md`](docs/VERIFICATION.md) records preservation checks.
+
+`legacy/` contains earlier repository source files, unmodified for reference. Do not mix them with the current workflow. The three numbered cleaning helpers come from the previous repository; their compatibility with the newly uploaded cleaner has not been verified by execution.
+
+The 19 October 2026 update adds consistent headers, section comments, numbering and documentation. **Commands are preserved against each file's source, except references to renamed do-files. Executable variable labels, output tables and model settings are unchanged.** Older-versus-newer analysis differences come from the author's uploaded source versions.
+
+Validation was static. Native Stata execution and econometric validation were not performed in this documentation update.

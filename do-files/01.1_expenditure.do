@@ -1,17 +1,35 @@
-   /******************************************************************** *
-   * ******************************************************************** *
-   *                                                                      *
-		Data cleans and manages expenditure data
-		This do-file loops over IHS IV and IHS V so that the cleaning 
-		can be performed simultaneously.
-   *               														  *                                
-   *				Author : Lonjezo Erick Folias                         *
-   *				Number : 0992 888 003   							  *
-   *				Email  : lonjefolias@hotmail.com					  *
-   * ******************************************************************** *
-   * ******************************************************************** */
-	
- 
+******************************************************************************
+*                                                                            *
+*  Study: Farm input subsidies (FISP) and adoption of sustainable            *
+*  agricultural practices in Malawi: synergies and implications on farm      *
+*  productivity and household resilience to food shocks                      *
+*                                                                            *
+*  File: 01.1_expenditure.do                                                 *
+*  Role: Cleaning support for expenditure                                    *
+*  Author: Lonjezo Erick Folias                                              *
+*  Email: lonjefolias@hotmail.com                                            *
+*  Phone: 0992 888 003                                                       *
+*  Documentation revision: 19 October 2026                                   *
+*                                                                            *
+*  Purpose: Constructs and merges household expenditure components for the   *
+*  active IHS5 loop.                                                         *
+*                                                                            *
+*  Inputs: Raw household consumption and expenditure modules; path globals.  *
+*                                                                            *
+*  Outputs: $workingfiles/ihsvexp_o.dta and intermediate expenditure         *
+*  aggregates.                                                               *
+*                                                                            *
+*  Run order: Called internally by 01_data_cleaning.do.                      *
+*                                                                            *
+*  Notes: Existing calculations, period conversions and merge behavior are   *
+*  preserved.                                                                *
+*                                                                            *
+******************************************************************************
+
+
+******************************************************************************
+**# CLEANING SUPPORT: CALLED BY 01_data_cleaning.do
+******************************************************************************
 global ihsivlock ihsiv // a lock to apply for IHS4 only, 
 ///in instances where there are different variable or datafile names
 

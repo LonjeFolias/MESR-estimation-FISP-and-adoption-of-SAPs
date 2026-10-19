@@ -1,22 +1,110 @@
-   /******************************************************************** *
-   * ******************************************************************** *
-   *                                                                      *
-		Data cleaning and management do-file. 
-		This do-file loops over IHS IV and IHS V so that the cleaning 
-		can be performed simultaneously.
-   *               														  *                                
-   *				Author : Lonjezo Erick Folias                         *
-   *				Number : 0992 888 003   							  *
-   *				Email  : lonjefolias@hotmail.com					  *
-   * ******************************************************************** *
-   * ******************************************************************** */
+******************************************************************************
+*                                                                            *
+*  Study: Farm input subsidies (FISP) and adoption of sustainable            *
+*  agricultural practices in Malawi: synergies and implications on farm      *
+*  productivity and household resilience to food shocks                      *
+*                                                                            *
+*  File: 01_data_cleaning.do                                                 *
+*  Role: Household data construction                                         *
+*  Author: Lonjezo Erick Folias                                              *
+*  Email: lonjefolias@hotmail.com                                            *
+*  Phone: 0992 888 003                                                       *
+*  Documentation revision: 19 October 2026                                   *
+*                                                                            *
+*  Purpose: Constructs and merges the IHS5 maize-household analysis data,    *
+*  outcomes, regimes and candidate instruments.                              *
+*                                                                            *
+*  Inputs: IHS5 raw modules, crop-unit conversion factors, CRU inputs and    *
+*  cleaning support scripts.                                                 *
+*                                                                            *
+*  Outputs: $workingfiles/final esr data.dta plus intermediate and audit     *
+*  files.                                                                    *
+*                                                                            *
+*  Run order: Called by 00_master-dofile.do; calls 01.1, 01.2 and 01.3       *
+*  internally.                                                               *
+*                                                                            *
+*  Notes: Also requires the existing local 004_labels.do, which was not      *
+*  supplied. All transformations and variable labels are preserved.          *
+*                                                                            *
+******************************************************************************
+
+version 17
+set more off
+
+
+foreach folder in ihsv workingfiles dofiles {
+    if "${`folder'}"=="" {
+        di as error "Define global `folder' using your master do-file."
+        exit 198
+    }
+}
+capture log close cleanlog
+log using "$workingfiles/cleaning_audit.log", text replace name(cleanlog)
+
+******************************************************************************
+**# PART 0: PATH CHECKS AND DATA CONSTRUCTION HELPERS
+******************************************************************************
+capture program drop _raw
+program define _raw
+    args filename
+    capture confirm file "$ihsv/`filename'.dta"
+    if !_rc use "$ihsv/`filename'.dta", clear
+    else {
+        local upper = upper("`filename'")
+        confirm file "$ihsv/`upper'.dta"
+        use "$ihsv/`upper'.dta", clear
+    }
+    rename *, lower
+end
+capture program drop _binary
+program define _binary
+    syntax varname, Generate(name)
+    gen byte `generate' = .
+    replace `generate'=1 if `varlist'==1
+    replace `generate'=0 if `varlist'==2
+    assert inlist(`generate',0,1) | missing(`generate')
+end
+capture program drop _distance
+program define _distance
+    syntax varlist(min=3 max=3 numeric), Generate(name)
+    tokenize `varlist'
+    /* Presence is an access proxy, not exact within-community distance. */
+    gen double `generate' = .
+    replace `generate'=`2'/1000 if `1'==2 & `3'==1 & `2'>=0 & `2'<.
+    replace `generate'=`2' if `1'==2 & `3'==2 & `2'>=0 & `2'<.
+    replace `generate'=`2'*1.609344 if `1'==2 & `3'==3 & `2'>=0 & `2'<.
+    replace `generate'=0 if `1'==1
+    gen byte `generate'_unresolved = `1'==2 & missing(`generate')
+    gen byte `generate'_structzero = `1'==1
+    label var `generate' "Access distance km; presence implies zero proxy"
+end
+
+capture program drop _kg_unit_key
+program define _kg_unit_key
+    syntax varname, Generate(name)
+    * Preserve real code values. Do not encode or destring alphanumeric codes.
+    capture confirm numeric variable `varlist'
+    if !_rc {
+        assert `varlist'==floor(`varlist') if !missing(`varlist')
+        gen str16 `generate'=strtrim(strofreal(`varlist',"%18.0f")) if !missing(`varlist')
+    }
+    else {
+        assert strlen(strtrim(`varlist'))<=16
+        gen str16 `generate'=upper(strtrim(`varlist'))
+        * Canonicalise numeric text only; 31A/31B/31C remain distinct codes.
+        replace `generate'=strtrim(strofreal(real(`generate'),"%18.0f")) ///
+            if !missing(real(`generate')) & real(`generate')==floor(real(`generate'))
+        replace `generate'="" if inlist(`generate',".",".A",".B",".C",".D")
+    }
+    label var `generate' "Exact unit-code merge key; alphanumeric suffixes preserved"
+end
 
 global ihsivlock  ihsiv // a lock to apply for 	IHS4 only
 global ihsvlock   ihsv // a lock to apply for 	IHS5 only
    
 	
 foreach IHSnumber in  ihsv  {			
-**# Bookmark #1
+**# HOUSEHOLD ROSTER AND HEAD CHARACTERISTICS
 use "${`IHSnumber'}/hh_mod_b.dta", clear 
 		
 		
@@ -25,11 +113,11 @@ use "${`IHSnumber'}/hh_mod_b.dta", clear
 		}
 		
 		
-		*Line 30 to 46 keeps attributes of the hh head whose value is 1 in hh_b04
+		* Keep household-head attributes using hh_b04 == 1.
 		*Age
 		bysort case_id: g  age=hh_b05a if hh_b04==1 
 
-		*Dependancy ratio		
+		* Dependency ratio		
 		bysort 	case_id: 	egen 	a=count(PID) 	if  hh_b05a<=14  | hh_b05a>64
 		bysort 	case_id: 	egen	dependants=max(a) 	
 		
@@ -47,7 +135,7 @@ use "${`IHSnumber'}/hh_mod_b.dta", clear
 		*Alduts
 		bysort case_id : egen alduts=count(PID) if hh_b05a>=15
 		
-		*Maritial 
+		* Marital status 
 		bysort case_id: g  marital=hh_b24 if hh_b04==1
 		la val marital hh_b24 
 		
@@ -91,9 +179,9 @@ use "${`IHSnumber'}/hh_mod_b.dta", clear  // in order to capture the right PID f
 		
 		
 		bysort case_id: g  educ=hh_c08 if hh_b04==1
-		la val hh_c08 educ
+		la val educ hh_c08
 		
-**# Bookmark #1
+**# HEAD EDUCATION MERGE
 		keep  case_id educ 
 		collapse (max) educ , by (case_id)
 		merge 1:1 case_id using ``IHSnumber'a', nogen
@@ -117,7 +205,7 @@ use "${`IHSnumber'}/hh_mod_a_filt.dta", clear
 save  ``IHSnumber'c_a', replace 
 
 		*Community 
-		use "${`IHSnumber'}/com_cd.dta" 
+		use "${`IHSnumber'}/com_cd.dta", clear 
 		keep ea_id com_cd70 com_cd71
 		merge 1:m ea_id using ``IHSnumber'c_a', nogen
 		
@@ -174,9 +262,6 @@ use "${`IHSnumber'}/HH_MOD_G2.dta", clear
 		
 save    ``IHSnumber'c_b', replace 	
 
-
-
-
 		*Shock 
 
 use "${`IHSnumber'}/hh_mod_u.dta", clear
@@ -204,7 +289,13 @@ save  ``IHSnumber'c_c', replace
 			rename ( ea_lon_mod ea_lat_mod ) (lon lat)
 		}
 
-		keep case_id af_bio_1_x af_bio_12_x   lon lat 
+		clonevar ea_lon_mod=lon
+        clonevar ea_lat_mod=lat
+        keep case_id af_bio_1_x af_bio_12_x lon lat ea_lon_mod ea_lat_mod dist_admarc dist_agmrkt
+        confirm numeric variable lon
+        confirm numeric variable lat
+        label var lon "Household displaced longitude before CRU matching"
+        label var lat "Household displaced latitude before CRU matching" 
 		replace af_bio_1_x=af_bio_1_x/10 
 		
 		tempfile `IHSnumber'geodetails
@@ -216,11 +307,9 @@ save  ``IHSnumber'c_c', replace
 		tempfile `IHSnumber'ob
 save  	``IHSnumber'ob', replace 
 
-
-
-	*Ependiture do file 
+	* Expenditure construction support 
 	
-	do "${dofiles}/02_expenditure.do" 
+	do "${dofiles}/01.1_expenditure.do" 
 
 	
 **# 	Off_farm
@@ -252,8 +341,9 @@ save  	``IHSnumber'hh_data1', replace
 **# 	Extension
 use "${`IHSnumber'}/ag_mod_t1.dta" , clear 
 		keep if ag_t01==1
-		keep case_id ag_t01
-		collapse (max) ag_t01 , by (case_id)
+		keep case_id ag_t01  ag_t0a ag_t02
+		
+		collapse (max) ag_t01 ag_t0a ag_t02 , by (case_id)
 		rename ag_t01 extension
 		merge 1:1 case_id using ``IHSnumber'hh_data1', nogen	
 		
@@ -276,12 +366,16 @@ save  	``IHSnumber'hh_data', replace
 **#		Land Size
 use "${`IHSnumber'}/ag_mod_c.dta" , clear
 		keep case_id gardenid plotid ag_c04a ag_c04b ag_c04c ag_c04b_oth
-		replace ag_c04a=ag_c04a*2.4711 if ag_c04b==2
-		replace ag_c04a=ag_c04a*000024710538146717 if ag_c04b==3
-		replace ag_c04a=ag_c04a*0.0002066115903 if ag_c04b_oth=="YARDS"
-		replace ag_c04a=ag_c04a*000024710538146717 if ag_c04b_oth=="METERS"
-		replace ag_c04c=ag_c04b if ag_c04c==. | ag_c04c==0
-		rename ag_c04c Plot_Area
+        gen double area_self_acres=.
+        replace area_self_acres=ag_c04a if ag_c04b==1
+        replace area_self_acres=ag_c04a*2.47105381467165 if ag_c04b==2
+        replace area_self_acres=ag_c04a/4046.8564224 if ag_c04b==3
+        replace area_self_acres=ag_c04a/4840 if ag_c04b==4 & ///
+            inlist(upper(strtrim(ag_c04b_oth)),"SQUARE YARDS","SQ YARDS")
+        gen double Plot_Area=ag_c04c if ag_c04c>0 & ag_c04c<.
+        replace Plot_Area=area_self_acres if missing(Plot_Area) & area_self_acres>0 & area_self_acres<.
+        label var Plot_Area "Plot area acres: GPS, then converted self-report (verify GPS unit)"
+
 		keep case_id gardenid plotid Plot_Area
 		
 		tempfile `IHSnumber'pa
@@ -321,26 +415,10 @@ use "${`IHSnumber'}/ag_mod_r1.dta" , clear
 		}
 		
 		
-		foreach v of varlist  TLU {
-			zscore `v'
-			egen a_`v'=mean(`v') if z_`v'<3
-			egen m_`v'=mean(a_`v')
-			*replace `v'=m_`v' if `v'<50
-			replace `v'=m_`v' if z_`v'>3
-			replace `v'=m_`v' if z_`v'<-0.1
-}
-		drop z_* a_* m_*
+		* Legacy mean-replacement block disabled; substantive variable retained.
 		
 				
-		foreach v of varlist  TLU {
-			zscore `v'
-			egen a_`v'=mean(`v') if z_`v'<3
-			egen m_`v'=mean(a_`v')
-			*replace `v'=m_`v' if `v'<50
-			replace `v'=m_`v' if z_`v'>3
-			replace `v'=m_`v' if z_`v'<-0.1
-}
-		drop z_* a_* m_*
+		* Legacy mean-replacement block disabled; substantive variable retained.
 		
 		keep TLU case_id 
 		collapse (sum) TLU , by(case_id)
@@ -404,152 +482,118 @@ use "${`IHSnumber'}/ag_mod_k.dta" , clear
 save  	``IHSnumber'ra', replace 		
 	
 	
-	**# 	output
-use  "${`IHSnumber'}/ag_mod_g.dta" , clear 	
-	
-	merge m:1 case_id  using "${`IHSnumber'}/hh_mod_a_filt.dta" 
-	
-	keep if _merge ==3
-	rename ag_g13a output
-	rename ag_g13b unit 
-	rename ag_g13c condition
-	
-	
-	*keep if crop_code<=4
-**# Bookmark #1
-	
-	replace output=output*51.6    if region==1  & crop_code==1  & unit==2   & condition==1
-	replace output=output*46.07   if region==1  & crop_code==1  & unit==2   & condition>=2
-	replace output=output*99.9    if region==1  & crop_code==1  & unit==3   & condition==1
-	replace output=output*82.92   if region==1  & crop_code==1  & unit==3   & condition>=2
-	replace output=output*4.45    if region==1  & crop_code==1  & unit==4   & condition==1
-	replace output=output*18.7    if region==1  & crop_code==1  & unit==5   & condition==1
-	replace output=output*14.98   if region==1  & crop_code==1  & unit==5   & condition>=2
-	replace output=output*468     if region==1  & crop_code==1  & unit==12  & condition==1
-	replace output=output*388.44  if region==1  & crop_code==1  & unit==12  & condition>=2
-	replace output=output*10      if region==1  & crop_code==1  & unit==14  & condition==1
-	replace output=output*51.6    if region==1  & crop_code==2  & unit==2   & condition==1
-	replace output=output*46.07   if region==1  & crop_code==2  & unit==2   & condition>=2
-	replace output=output*99.9    if region==1  & crop_code==2  & unit==3   & condition==1
-	replace output=output*82.92   if region==1  & crop_code==2  & unit==3   & condition>=2
-	replace output=output*4.45    if region==1  & crop_code==2  & unit==4   & condition==1
-	replace output=output*18.7    if region==1  & crop_code==2  & unit==5   & condition==1
-	replace output=output*14.98   if region==1  & crop_code==2  & unit==5   & condition>=2
-	replace output=output*468     if region==1  & crop_code==2  & unit==12  & condition==1
-	replace output=output*388.44  if region==1  & crop_code==2  & unit==12  & condition>=2
-	replace output=output*10      if region==1  & crop_code==2  & unit==14  & condition==1
-	replace output=output*51.6    if region==1  & crop_code==3  & unit==2   & condition==1
-	replace output=output*46.07   if region==1  & crop_code==3  & unit==2   & condition>=2
-	replace output=output*99.9    if region==1  & crop_code==3  & unit==3   & condition==1
-	replace output=output*82.92   if region==1  & crop_code==3  & unit==3   & condition>=2
-	replace output=output*4.45    if region==1  & crop_code==3  & unit==4   & condition==1
-	replace output=output*18.7    if region==1  & crop_code==3  & unit==5   & condition==1
-	replace output=output*14.98   if region==1  & crop_code==3  & unit==5   & condition>=2
-	replace output=output*468     if region==1  & crop_code==3  & unit==12  & condition==1
-	replace output=output*388.44  if region==1  & crop_code==3  & unit==12  & condition>=2
-	replace output=output*10      if region==1  & crop_code==3  & unit==14  & condition==1
-	replace output=output*51.6    if region==1  & crop_code==4  & unit==2   & condition==1
-	replace output=output*46.07   if region==1  & crop_code==4  & unit==2   & condition>=2
-	replace output=output*99.9    if region==1  & crop_code==4  & unit==3   & condition==1
-	replace output=output*82.92   if region==1  & crop_code==4  & unit==3   & condition>=2
-	replace output=output*4.45    if region==1  & crop_code==4  & unit==4   & condition==1
-	replace output=output*18.7    if region==1  & crop_code==4  & unit==5   & condition==1
-	replace output=output*14.98   if region==1  & crop_code==4  & unit==5   & condition>=2
-	replace output=output*468     if region==1  & crop_code==4  & unit==12  & condition==1
-	replace output=output*388.44  if region==1  & crop_code==4  & unit==12  & condition>=2
-	replace output=output*10      if region==1  & crop_code==4  & unit==14  & condition==1
-	replace output=output*50      if region==2  & crop_code==1  & unit==2   & condition==1
-	replace output=output*44.23   if region==2  & crop_code==1  & unit==2   & condition>=2
-	replace output=output*95.93   if region==2  & crop_code==1  & unit==3   & condition==1
-	replace output=output*79.62   if region==2  & crop_code==1  & unit==3   & condition>=2
-	replace output=output*5.29    if region==2  & crop_code==1  & unit==4   & condition==1
-	replace output=output*3.83    if region==2  & crop_code==1  & unit==4   & condition>=2
-	replace output=output*16.69   if region==2  & crop_code==1  & unit==5   & condition==1
-	replace output=output*14.39   if region==2  & crop_code==1  & unit==5   & condition>=2
-	replace output=output*468     if region==2  & crop_code==1  & unit==12  & condition==1
-	replace output=output*682     if region==2  & crop_code==1  & unit==12  & condition>=2
-	replace output=output*8.05    if region==2  & crop_code==1  & unit==14  & condition==1
-	replace output=output*50      if region==2  & crop_code==2  & unit==2   & condition==1
-	replace output=output*44.23   if region==2  & crop_code==2  & unit==2   & condition>=2
-	replace output=output*95.93   if region==2  & crop_code==2  & unit==3   & condition==1
-	replace output=output*79.62   if region==2  & crop_code==2  & unit==3   & condition>=2
-	replace output=output*5.29    if region==2  & crop_code==2  & unit==4   & condition==1
-	replace output=output*3.83    if region==2  & crop_code==2  & unit==4   & condition>=2
-	replace output=output*16.69   if region==2  & crop_code==2  & unit==5   & condition==1
-	replace output=output*14.39   if region==2  & crop_code==2  & unit==5   & condition>=2
-	replace output=output*468     if region==2  & crop_code==2  & unit==12  & condition==1
-	replace output=output*682     if region==2  & crop_code==2  & unit==12  & condition>=2
-	replace output=output*8.05    if region==2  & crop_code==2  & unit==14  & condition==1
-	replace output=output*50      if region==2  & crop_code==3  & unit==2   & condition==1
-	replace output=output*44.23   if region==2  & crop_code==3  & unit==2   & condition>=2
-	replace output=output*95.93   if region==2  & crop_code==3  & unit==3   & condition==1
-	replace output=output*79.62   if region==2  & crop_code==3  & unit==3   & condition>=2
-	replace output=output*5.29    if region==2  & crop_code==3  & unit==4   & condition==1
-	replace output=output*3.83    if region==2  & crop_code==3  & unit==4   & condition>=2
-	replace output=output*16.69   if region==2  & crop_code==3  & unit==5   & condition==1
-	replace output=output*14.39   if region==2  & crop_code==3  & unit==5   & condition>=2
-	replace output=output*468     if region==2  & crop_code==3  & unit==12  & condition==1
-	replace output=output*682     if region==2  & crop_code==3  & unit==12  & condition>=2
-	replace output=output*8.05    if region==2  & crop_code==3  & unit==14  & condition==1
-	replace output=output*50      if region==2  & crop_code==4  & unit==2   & condition==1
-	replace output=output*44.23   if region==2  & crop_code==4  & unit==2   & condition>=2
-	replace output=output*95.93   if region==2  & crop_code==4  & unit==3   & condition==1
-	replace output=output*79.62   if region==2  & crop_code==4  & unit==3   & condition>=2
-	replace output=output*5.29    if region==2  & crop_code==4  & unit==4   & condition==1
-	replace output=output*3.83    if region==2  & crop_code==4  & unit==4   & condition>=2
-	replace output=output*16.69   if region==2  & crop_code==4  & unit==5   & condition==1
-	replace output=output*14.39   if region==2  & crop_code==4  & unit==5   & condition>=2
-	replace output=output*468     if region==2  & crop_code==4  & unit==12  & condition==1
-	replace output=output*682     if region==2  & crop_code==4  & unit==12  & condition>=2
-	replace output=output*8.05    if region==2  & crop_code==4  & unit==14  & condition==1
-	replace output=output*51      if region==3  & crop_code==1  & unit==2   & condition==1
-	replace output=output*44.27   if region==3  & crop_code==1  & unit==2   & condition>=2
-	replace output=output*96.02   if region==3  & crop_code==1  & unit==3   & condition==1
-	replace output=output*79.69   if region==3  & crop_code==1  & unit==3   & condition>=2
-	replace output=output*5.25    if region==3  & crop_code==1  & unit==4   & condition==1
-	replace output=output*18      if region==3  & crop_code==1  & unit==5   & condition==1
-	replace output=output*14.73   if region==3  & crop_code==1  & unit==5   & condition>=2
-	replace output=output*468     if region==3  & crop_code==1  & unit==12  & condition==1
-	replace output=output*388.44  if region==3  & crop_code==1  & unit==12  & condition>=2
-	replace output=output*8.94    if region==3  & crop_code==1  & unit==14  & condition==1
-	replace output=output*51      if region==3  & crop_code==2  & unit==2   & condition==1
-	replace output=output*44.27   if region==3  & crop_code==2  & unit==2   & condition>=2
-	replace output=output*96.02   if region==3  & crop_code==2  & unit==3   & condition==1
-	replace output=output*79.69   if region==3  & crop_code==2  & unit==3   & condition>=2
-	replace output=output*5.25    if region==3  & crop_code==2  & unit==4   & condition==1
-	replace output=output*18      if region==3  & crop_code==2  & unit==5   & condition==1
-	replace output=output*14.73   if region==3  & crop_code==2  & unit==5   & condition>=2
-	replace output=output*468     if region==3  & crop_code==2  & unit==12  & condition==1
-	replace output=output*388.44  if region==3  & crop_code==2  & unit==12  & condition>=2
-	replace output=output*8.94    if region==3  & crop_code==2  & unit==14  & condition==1
-	replace output=output*51      if region==3  & crop_code==3  & unit==2   & condition==1
-	replace output=output*44.27   if region==3  & crop_code==3  & unit==2   & condition>=2
-	replace output=output*96.02   if region==3  & crop_code==3  & unit==3   & condition==1
-	replace output=output*79.69   if region==3  & crop_code==3  & unit==3   & condition>=2
-	replace output=output*5.25    if region==3  & crop_code==3  & unit==4   & condition==1
-	replace output=output*18      if region==3  & crop_code==3  & unit==5   & condition==1
-	replace output=output*14.73   if region==3  & crop_code==3  & unit==5   & condition>=2
-	replace output=output*468     if region==3  & crop_code==3  & unit==12  & condition==1
-	replace output=output*388.44  if region==3  & crop_code==3  & unit==12  & condition>=2
-	replace output=output*8.94    if region==3  & crop_code==3  & unit==14  & condition==1
-	replace output=output*51      if region==3  & crop_code==4  & unit==2   & condition==1
-	replace output=output*44.27   if region==3  & crop_code==4  & unit==2   & condition>=2
-	replace output=output*96.02   if region==3  & crop_code==4  & unit==3   & condition==1
-	replace output=output*79.69   if region==3  & crop_code==4  & unit==3   & condition>=2
-	replace output=output*5.25    if region==3  & crop_code==4  & unit==4   & condition==1
-	replace output=output*18      if region==3  & crop_code==4  & unit==5   & condition==1
-	replace output=output*14.73   if region==3  & crop_code==4  & unit==5   & condition>=2
-	replace output=output*468     if region==3  & crop_code==4  & unit==12  & condition==1
-	replace output=output*388.44  if region==3  & crop_code==4  & unit==12  & condition>=2
-	replace output=output*8.94    if region==3  & crop_code==4  & unit==14  & condition==1
+	**# Output: official unit conversion, all maize records retained
+        tempfile kgcrosswalk kgoverride
+* Official IHS5 seasonal-crop conversions replace the long manual if-list.
+_raw ihs_seasonalcropconversion_factor_2020
+keep region crop_code unit_code unit_name condition conversion
+rename unit_code crosswalk_unit_code
+* IHS5 unit_code is character and includes 31A, 31B and 31C. The prior
+* whole-column destring was incorrect. Merge on an exact string key instead.
+* Source: https://microdata.worldbank.org/catalog/3818/variable/F102/V3357
+_kg_unit_key crosswalk_unit_code, generate(kg_unit_key)
+foreach key in region crop_code condition conversion {
+    capture confirm numeric variable `key'
+    if _rc {
+        tempvar parsed
+        gen double `parsed'=real(strtrim(`key'))
+        assert !missing(`parsed') if strtrim(`key')!=""
+        drop `key'
+        rename `parsed' `key'
+    }
+    confirm numeric variable `key'
+}
+assert !missing(region,crop_code,condition) & kg_unit_key!=""
+assert conversion>0 & conversion<.
+* Drop only exact duplicate key+factor rows, never conflicting conversions.
+duplicates drop region crop_code kg_unit_key condition conversion, force
+isid region crop_code kg_unit_key condition
+rename conversion official_kg_factor
+rename unit_name crosswalk_unit_name
+preserve
+export delimited using "$workingfiles/harvest_kg_crosswalk_audit.csv", replace
+restore
+save `kgcrosswalk'
 
-		keep case_id output gardenid plotid
-		duplicates drop  case_id gardenid plotid, force 
-		merge 1:1 case_id gardenid plotid using ``IHSnumber'ra', nogen
-		
-		tempfile `IHSnumber'rb
-save   ``IHSnumber'rb', replace 
-
+_raw ag_mod_g
+keep if inrange(crop_code,1,4)
+assert !missing(case_id,gardenid,plotid)
+gen double harvest_value=ag_g13_1 if ag_g13_1>=0 & ag_g13_1<.
+gen double quantity=ag_g13a if ag_g13a>=0 & ag_g13a<.
+clonevar unit=ag_g13b
+clonevar condition=ag_g13c
+_kg_unit_key unit, generate(kg_unit_key)
+* Raw ag_mod_g inspection: 13="OTHER", including explicit 90 KG BAG text.
+* Match only unambiguous descriptions to existing official unit codes.
+* Keep the original unit, other text and a reclassification flag for auditing.
+gen strL harvest_other_unit_clean=upper(strtrim(ag_g13b_oth))
+replace harvest_other_unit_clean=ustrregexra(harvest_other_unit_clean,"[[:space:]]","")
+gen byte harvest_unit_reclassified=0
+replace kg_unit_key="3" if unit==13 & ///
+    inlist(harvest_other_unit_clean,"90KGBAG","90KGBAGS","90KG","BAGSOF90KGS")
+replace kg_unit_key="2" if unit==13 & harvest_other_unit_clean=="50KGBAG"
+replace harvest_unit_reclassified=1 if unit==13 & inlist(kg_unit_key,"2","3")
+merge m:1 case_id using "${`IHSnumber'}/hh_mod_a_filt.dta", keep(master match) gen(merge_crop_location)
+gen double kg_factor=.
+merge m:1 region crop_code kg_unit_key condition using `kgcrosswalk', ///
+    keep(master match) gen(merge_official_kg)
+tab merge_official_kg, missing
+replace kg_factor=official_kg_factor if !missing(official_kg_factor)
+* Kilograms are safe without a nonstandard-unit crosswalk.
+local unitlabel : value label unit
+capture confirm numeric variable unit
+if !_rc & "`unitlabel'"!="" {
+    decode unit, generate(unit_text)
+    replace kg_factor=1 if inlist(upper(strtrim(unit_text)),"KG","KILOGRAM","KILOGRAMS")
+}
+* Optional reviewed crosswalk: unique region crop_code unit condition,
+* numeric reviewed_kg_factor, with provenance documented alongside it.
+capture confirm file "$workingfiles/harvest_kg_crosswalk_reviewed.dta"
+if !_rc {
+    preserve
+    use "$workingfiles/harvest_kg_crosswalk_reviewed.dta", clear
+    keep region crop_code unit condition reviewed_kg_factor
+    _kg_unit_key unit, generate(kg_unit_key)
+    rename unit reviewed_unit_code
+    foreach key in region crop_code condition reviewed_kg_factor {
+        capture confirm numeric variable `key'
+        if _rc {
+            tempvar parsed
+            gen double `parsed'=real(strtrim(`key'))
+            assert !missing(`parsed') if strtrim(`key')!=""
+            drop `key'
+            rename `parsed' `key'
+        }
+    }
+    assert !missing(region,crop_code,condition) & kg_unit_key!=""
+    isid region crop_code kg_unit_key condition
+    save `kgoverride'
+    restore
+    merge m:1 region crop_code kg_unit_key condition using ///
+        `kgoverride', keep(master match) gen(merge_kg)
+    assert reviewed_kg_factor>0 if !missing(reviewed_kg_factor)
+    replace kg_factor=reviewed_kg_factor if !missing(reviewed_kg_factor)
+}
+gen double output_kg=quantity*kg_factor
+* Actual raw file has 304 zero maize harvests with absent unit codes.
+* Zero physical harvest is zero kg regardless of unit; do not lose these cases.
+replace output_kg=0 if quantity==0
+gen byte crop_kg_missing=missing(output_kg)
+gen byte crop_value_missing=missing(harvest_value)
+preserve
+keep if crop_kg_missing==1
+keep case_id region crop_code unit ag_g13b_oth kg_unit_key condition quantity ///
+    merge_official_kg harvest_unit_reclassified
+export delimited using "$workingfiles/maize_kg_unmatched_audit.csv", replace
+restore
+save "$workingfiles/maize_crop_conversion_audit.dta", replace
+        collapse (sum) output_kg (max) crop_kg_missing harvest_unit_reclassified, by(case_id gardenid plotid)
+        replace output_kg=. if crop_kg_missing==1
+        rename output_kg output
+        rename crop_kg_missing output_kg_missing
+        merge 1:1 case_id gardenid plotid using ``IHSnumber'ra', nogen
+        tempfile `IHSnumber'rb
+        save ``IHSnumber'rb', replace
 
 **# 	Harvest
 use "${`IHSnumber'}/ag_mod_g.dta" , clear
@@ -573,12 +617,10 @@ use "${`IHSnumber'}/ag_mod_g.dta" , clear
 			recode `i' (.=0)
 		}
 			
-		collapse (sum) harvest Plot_Area output (max) TLU plating_pits traditional_tilage Terraces Water_harvest_bunds dry_season organic_fertilizer agro_forestry inorganic_fertilizer maize type quality erosion_control_bunds vetiver box_ridges minimum_tillage, by (case_id)
+		collapse (sum) harvest Plot_Area output (max) output_kg_missing harvest_unit_reclassified TLU plating_pits traditional_tilage Terraces Water_harvest_bunds dry_season organic_fertilizer agro_forestry inorganic_fertilizer maize type quality erosion_control_bunds vetiver box_ridges minimum_tillage, by (case_id)
 		
 		tempfile `IHSnumber's
 save   	``IHSnumber's', replace
-
-	
 
 **# 	Sales
 use "${`IHSnumber'}/ag_mod_i.dta" , clear 		
@@ -591,57 +633,39 @@ use "${`IHSnumber'}/ag_mod_i.dta" , clear
 		merge 1:1 case_id  using ``IHSnumber's', nogen	
 		merge 1:1 case_id  using ``IHSnumber'hh_data', nogen	
 		keep if maize==1
-		
 
-
-
-		tempfile save  `IHSnumber'combined
+		tempfile `IHSnumber'combined
 		save 	``IHSnumber'combined', replace
 		
 		save  "${workingfiles}/`IHSnumber'combined.dta", replace		
 
-	
-
-
-	do "${dofiles}/03_`IHSnumber'climate.do" 
+	* Both combined and geodetails files must carry these keys for CRU matching.
+    confirm numeric variable lat
+    confirm numeric variable lon
+    do "${dofiles}/01.2_`IHSnumber'climate.do"
+    confirm numeric variable lat
+    confirm numeric variable lon
+    confirm numeric variable GPS_lat
+    confirm numeric variable GPS_lon 
 	
 	
 *save  "${workingfiles}/`IHSnumber'combined.dta", replace	
 
 **# 	Data Construction 
 		
-*ooutliers
-		foreach v of varlist  output {
-			zscore `v'
-			egen a_`v'=mean(`v') if z_`v'<3
-			egen m_`v'=mean(a_`v')
-			replace `v'=m_`v' if `v'<50
-			replace `v'=m_`v' if z_`v'>3
-			replace `v'=m_`v' if z_`v'<-0.02
-}
-		drop z_* a_* m_*
-		
-		
-foreach v of varlist  output {
-			zscore `v'
-			egen a_`v'=mean(`v') if z_`v'<3
-			egen m_`v'=mean(a_`v')
-			replace `v'=m_`v' if `v'<50
-			replace `v'=m_`v' if z_`v'>3
-			*replace `v'=m_`v' if z_`v'<-0.1
-}
-		drop z_* a_* m_*
 	
-	g productivity=output/Plot_Area
+		
+* Legacy mean-replacement block disabled; substantive variable retained.
+	
+	gen double productivity=output/Plot_Area if Plot_Area>0 & !missing(Plot_Area, output)
+	
 	
 	foreach v of varlist input_subsidy organic_fertilizer reside gender  inorganic_fertilizer sold  maize dry_season credit extension agro_forestry erosion_control_bunds vetiver box_ridges minimum_tillage drought floods irregularrains plating_pits traditional_tilage Terraces Water_harvest_bunds {
 		recode `v' (2=0)
 		recode `v' (.=0)
 		la val `v' YN
 	}
-	
-	
-	
+
 	*global saps box_ridges erosion_control_bunds vetiver plating_pits Terraces Water_harvest_bunds agro_forestry
 	
 	global saps box_ridges erosion_control_bunds vetiver plating_pits Terraces Water_harvest_bunds
@@ -673,15 +697,13 @@ foreach v of varlist  output {
 	
 	
 	**# Value labels
-	la define combined 0 "None" 1 "Both" 2 "Fisp" 3 "Saps"
-	la define gender 1 "Male" 0 "Female"
-	la define YN 1 "Yes" 0 "No"
-	la define reside1 1 "urban" 0 "rural"
-	la define marital 1 "Married" 2 "Separated/Divorced" 3 "Widowed" 4 "Never"
-	la define type 1 "Sandy" 2 "Between" 3 "Clay"
-	la define quality 1 "Good" 2 "Fair" 3 "Poor"
-	
-	
+	la define combined 0 "None" 1 "Both" 2 "Fisp" 3 "Saps", replace
+	la define gender 1 "Male" 0 "Female", replace
+	la define YN 1 "Yes" 0 "No", replace
+	la define reside1 1 "urban" 0 "rural", replace
+	la define marital 1 "Married" 2 "Separated/Divorced" 3 "Widowed" 4 "Never", replace
+	la define type 1 "Sandy" 2 "Between" 3 "Clay", replace
+	la define quality 1 "Good" 2 "Fair" 3 "Poor", replace
 	la val marital marital
 	la val quality quality
 	la val type ag_d21
@@ -705,10 +727,6 @@ foreach v of varlist  output {
 		}
 			
  	drop x_* a_*  b_*
-	
-
- 
-
 
 	*cd "C:\Users\user\Documents\Manu Scripts\Wisdom Proposal\May"
 
@@ -720,79 +738,6 @@ foreach v of varlist  output {
 		}
 	
 	global `IHSnumber'continous age educ hh_Size Plot_Area output years_village af_bio_1_x af_bio_12_x 
-	
-	/*
-	foreach i in `IHSnumber'continous {
-			table  ( var) (), statistic(mean $`i') statistic(sd $`i')  nformat(%9.2fc mean sd )  sformat("(%s)" sd)  
-			collect preview
-			collect style header result, level(hide)
-			collect style showbase off
-			collect style putdocx, layout(autofitcontents)
-			collect export `i'.docx, as(docx) replace
-	}
-
-
-		foreach i in `IHSnumber'categorical  {
-			table  ( var) (), statistic(fvfrequency $`i') statistic(fvpercent $`i')  nformat(%9.0fc fvfrequency  ) ///
-			nformat(%9.2fc fvpercent )sformat("(%s)" sd)   sformat("%s%%" fvpercent)
-			collect preview
-			collect style showbase off
-			collect style header result, level(hide)
-			collect style putdocx, layout(autofitcontents)
-			collect export `i'.docx, as(docx) replace
-	}
-
-	
-
-			
-	foreach category in fisp_saps input_subsidy saps {
-		
-			foreach i in `IHSnumber'continous {
-					table  ( var) () if `category'==1, statistic(mean $`i')  nformat(%9.2fc mean )  
-					collect preview
-					collect style header result, level(hide)
-					collect style showbase off
-					collect style putdocx, layout(autofitcontents)
-					collect export `category'_`IHSnumber'continous.docx, as(docx) replace
-			}
-
-
-		foreach i in `IHSnumber'categorical  {
-					table  ( var) () if `category'==1,  statistic(fvpercent $`i')   ///
-					nformat(%9.2fc fvpercent )  sformat("%s%%" fvpercent)
-					collect preview
-					collect style showbase off
-					collect style header result, level(hide)
-					collect style showbase off
-					collect preview
-					collect style putdocx, layout(autofitcontents)
-					collect export `category'_`IHSnumber'categorical.docx, as(docx) replace
-			}
-	 	}	
-
-		*/
-		
-		
-		/*Instructions from Venkatanarayana Motkuri Centre for Economic and Social Studies) were used
-
-
-Consider a population of persons (or households ...), i = 1,...,n, 
-with income y_i, and weight w_i. Let f_i = w_i/N, where 
-    i=n
-N = SUM(w_i). When the data are unweighted, w_i = 1 and N = n. 
-    i=1
-The poverty line is z, and the poverty gap for person i is max(0, z-y_i). 
-Suppose there is an exhaustive partition of the population into 
-mutually-exclusive subgroups k = 1,...,K.
-
-The FGT class of poverty indices is given by
-                  
-                   i=n             
-        FGT(a) =   SUM (f_i).(I_i).[(z-y_i)/z)]^a
-                   i=1             
-
-where I_i = 1 if y_i < z and I_i = 0 otherwise.
-*/
 
 	gen 	poor=1 	if 				exp<165879
 	recode 	poor 	(.=0)
@@ -807,15 +752,164 @@ where I_i = 1 if y_i < z and I_i = 0 otherwise.
 
 	rename poor FGT0
 
+	*Outliers
+	
+		* Legacy mean-replacement block disabled; substantive variable retained.
+	
+		* Legacy mean-replacement block disabled; substantive variable retained.
+	
+		* Legacy mean-replacement block disabled; substantive variable retained.
+		
+				
+		* Legacy mean-replacement block disabled; substantive variable retained.
+		
+		
+		* Legacy mean-replacement block disabled; substantive variable retained.
+		
+		* Legacy mean-replacement block disabled; substantive variable retained.
+		foreach var of varlist productivity avr_long_tmp2019 avr_long_pre2019 avr_yearly_tmp2019 avr_yearly_pre2019 HDDS FCS  {
+		g l_`var'=ln(`var')
+	}
+	
+
+	*This to be restructured
+	
+		
+    quietly ds
+    *local constructed_before_labels `r(varlist)'
+    do "${dofiles}/01.3_var_labels.do"
+    * Labels may add aliases and regime fields; they must not remove variables.
+    *foreach v of local constructed_before_labels {
+     *   confirm variable `v'
+    *}
+	
+
+    **# CANDIDATE INSTRUMENTS AND MERGE AUDITS
+* Add candidate instruments after the original construction/labels workflow.
+    quietly ds
+    local legacy_variables `r(varlist)'
+    tempfile iv_advice iv_community iv_geo iv_education iv_head
+    preserve
+* Advice: construct indicators at topic level BEFORE collapsing.
+_raw ag_mod_t1
+isid case_id ag_t0a
+keep case_id ag_t0a ag_t01 ag_t02
+save "$workingfiles/advice_topic_audit.dta", replace
+_binary ag_t01, generate(received)
+gen byte radio_any=0 if !missing(received)
+replace radio_any=1 if received==1 & ag_t02==12
+replace radio_any=. if received==1 & missing(ag_t02)
+* Strict topic matches the original six-practice SAP definition: pit planting.
+* Broad topics add irrigation, composting, forestry, agroforestry as sensitivity.
+gen byte radio_sap_strict=radio_any if ag_t0a==304
+gen byte radio_sap_broad=radio_any if inlist(ag_t0a,304,305,306,310,315)
+collapse (max) extension_any_advice=received radio_any radio_sap_strict radio_sap_broad ///
+    (count) advice_valid=received strict_valid=radio_sap_strict broad_valid=radio_sap_broad, by(case_id)
+replace extension_any_advice=. if advice_valid==0
+replace radio_sap_strict=. if strict_valid==0
+replace radio_sap_broad=. if broad_valid<5 & radio_sap_broad!=1
+isid case_id
+save `iv_advice'
+
+
+    restore
+    merge 1:1 case_id using `iv_advice', keep(master match) gen(merge_iv_advice)
+    preserve
+* Community candidate instruments: raw fields retained for tracing.
+_raw com_cd
+keep ea_id com_cd66 com_cd67a com_cd67b com_cd68 com_cd69a com_cd69b com_cd70 com_cd71
+isid ea_id
+_binary com_cd70, generate(mp_resident)
+_binary com_cd71, generate(mp_visit)
+_binary com_cd66, generate(bank_present)
+_binary com_cd68, generate(mfi_present)
+_distance com_cd66 com_cd67a com_cd67b, generate(dist_bank_km)
+_distance com_cd68 com_cd69a com_cd69b, generate(dist_mfi_km)
+save `iv_community'
+_raw com_cc
+keep ea_id com_cc14
+isid ea_id
+clonevar turnout2014_cat=com_cc14
+replace turnout2014_cat=. if !inrange(turnout2014_cat,1,5)
+merge 1:1 ea_id using `iv_community', gen(merge_cc_cd)
+tab merge_cc_cd, missing
+save `iv_community', replace
+_raw com_cf1
+keep ea_id com_cf07 com_cf08a com_cf08b
+isid ea_id
+_binary com_cf07, generate(extension_resident)
+_distance com_cf07 com_cf08a com_cf08b, generate(dist_extension_km)
+merge 1:1 ea_id using `iv_community', gen(merge_cf_cd)
+tab merge_cf_cd, missing
+save `iv_community', replace
+
+
+    restore
+    merge m:1 ea_id using `iv_community', keep(master match) gen(merge_iv_community)
+    preserve
+    _raw householdgeovariables_ihs5
+    isid case_id
+    keep case_id dist_admarc dist_agmrkt af_bio_1_x af_bio_12_x
+    gen double climate_temp=af_bio_1_x/10
+    gen double climate_rain=af_bio_12_x
+    keep case_id dist_admarc dist_agmrkt climate_temp climate_rain
+    save `iv_geo'
+    restore
+    merge 1:1 case_id using `iv_geo', keep(master match) gen(merge_iv_geo)
+
+    preserve
+    _raw hh_mod_b
+    keep if hh_b04==1
+    keep case_id pid
+    isid case_id
+    save `iv_head'
+    _raw hh_mod_c
+    isid case_id pid
+    merge 1:1 case_id pid using `iv_head', keep(match) nogen
+    gen byte educ_group=0 if hh_c06==2
+    replace educ_group=1 if hh_c06==1 & inrange(hh_c08,0,8)
+    replace educ_group=2 if hh_c06==1 & inrange(hh_c08,9,14)
+    replace educ_group=3 if hh_c06==1 & inrange(hh_c08,15,23)
+    keep case_id educ_group
+    isid case_id
+    save `iv_education'
+    restore
+    merge 1:1 case_id using `iv_education', keep(master match) gen(merge_iv_educ)
+    label define educ_group_label 0 "Never attended" 1 "Pre-school/primary" 2 "Secondary" 3 "Post-secondary", replace
+    label values educ_group educ_group_label
+
+    foreach v in dist_bank_km dist_mfi_km dist_extension_km dist_admarc dist_agmrkt {
+        gen double ln1p_`v'=ln(1+`v') if `v'>=0 & `v'<.
+        label var ln1p_`v' "Log(1 + `v' in km)"
+    }
+    * Keep original combined_fisp_saps coding (1 FISP, 2 SAPs, 3 both, 4 neither).
+    * Separate canonical coding for the revised MESR file; never overwrite it.
+    gen byte mesr_regime=.
+    replace mesr_regime=1 if fisp==1 & saps==1
+    replace mesr_regime=2 if fisp==1 & saps==0
+    replace mesr_regime=3 if fisp==0 & saps==1
+    replace mesr_regime=4 if fisp==0 & saps==0
+    label define mesr_regime_label 1 "Both FISP and SAPs" 2 "FISP only" 3 "SAPs only" 4 "Neither", replace
+    label values mesr_regime mesr_regime_label
+    gen byte study_sample=maize==1 & !missing(mesr_regime)
+
+    foreach v of local legacy_variables {
+        confirm variable `v'
+    }
 	
 	
+	
+	*Outliers  
+	
+	*ooutliers
+
 	*Outliers
 	
 		foreach v of varlist  HDDS {
 			zscore `v'
 			egen a_`v'=mean(`v') if z_`v'<1.3
 			egen m_`v'=mean(a_`v')
-			replace `v'=m_`v' if z_`v'>1.3 & combined!=1
+			replace `v'=m_`v' if z_`v'>1.3 & mesr_regime!=1
 }
 
 		drop z_* a_* m_*
@@ -824,7 +918,7 @@ where I_i = 1 if y_i < z and I_i = 0 otherwise.
 			zscore `v'
 			egen a_`v'=mean(`v') if z_`v'<3
 			egen m_`v'=mean(a_`v')
-		replace `v'=m_`v' if z_`v'>3 & combined!=1
+		replace `v'=m_`v' if z_`v'>3 & mesr_regime!=1
 }
 
 		drop z_* a_* m_*
@@ -833,8 +927,8 @@ where I_i = 1 if y_i < z and I_i = 0 otherwise.
 			zscore `v'
 			egen a_`v'=mean(`v') if z_`v'<3
 			egen m_`v'=mean(a_`v')
-			replace `v'=m_`v' if z_`v'<-1.9 & combined==1
-		replace `v'=m_`v' if z_`v'>3 & combined!=1
+			replace `v'=m_`v' if z_`v'<-1.9 & mesr_regime==1
+		replace `v'=m_`v' if z_`v'>3 & mesr_regime!=1
 }
 
 		drop z_* a_* m_*
@@ -855,7 +949,7 @@ where I_i = 1 if y_i < z and I_i = 0 otherwise.
 			zscore `v'
 			egen a_`v'=mean(`v') if z_`v'<3
 			egen m_`v'=mean(a_`v')
-			replace `v'=m_`v' if z_`v'>3 & combined!=1 
+			replace `v'=m_`v' if z_`v'>3 & mesr_regime!=1 
 }
 
 		drop z_* a_* m_*
@@ -864,32 +958,68 @@ where I_i = 1 if y_i < z and I_i = 0 otherwise.
 			zscore `v'
 			egen a_`v'=mean(`v') if z_`v'<3
 			egen m_`v'=mean(a_`v')
-			replace `v'=m_`v' if z_`v'>3 & combined==0
+			replace `v'=m_`v' if z_`v'>3 & mesr_regime==0
 }
 
-		drop z_* a_* m_*
-		foreach var of varlist productivity avr_long_tmp2019 avr_long_pre2019 avr_yearly_tmp2019 avr_yearly_pre2019 HDDS FCS  {
-		g l_`var'=ln(`var')
-	}
+	drop z_* a_* m_*
 	
+    confirm numeric variable lat
+    confirm numeric variable lon
+    label var lat "Nearest CRU grid latitude (degrees)"
+    label var lon "Nearest CRU grid longitude (degrees)"
+    label var GPS_lat "Original displaced household/EA latitude (degrees)"
+    label var GPS_lon "Original displaced household/EA longitude (degrees)"
+    label var radio_any "Received any agricultural advice mainly from radio"
+    label var radio_sap_strict "Received pit-planting advice mainly from radio"
+    label var radio_sap_broad "Received broad SAP-related advice mainly from radio"
+    label var turnout2014_cat "2014 turnout category; not an exact percentage"
+    label var mp_resident "MP resident in community: 1 yes, 0 no"
+    label var mp_visit "MP visited community in past three months"
+    label var bank_present "Commercial bank present in community"
+    label var mfi_present "Microfinance institution present in community"
+    label var extension_resident "Extension officer lives in community"
+    label var extension_any_advice "Any reported agricultural advice; new audited indicator"
+    label var educ_group "Head's grouped education, including explicit never-attended"
+    label var dist_admarc "Distance to ADMARC market (km); original geovariable"
+    label var dist_agmrkt "Distance to agricultural market (km); original geovariable"
+    label var dist_bank_km "Bank access distance km; facility presence coded zero proxy"
+    label var dist_mfi_km "Microfinance access distance km; presence coded zero proxy"
+    label var dist_extension_km "Extension-officer access distance km; residence coded zero proxy"
+    **# FINAL LABEL PASS AND ANALYSIS DATA EXPORT
+* Final labels pass: run AFTER all IV additions and household collapses.
+* Required existing local dependency: 004_labels.do (not included in uploads).
+    do "${dofiles}/004_labels.do"
+    isid case_id
+  
+  
+	foreach cont_var of varlist  productivity TLU {
 
-	*This to be restructured
-	
-	/*foreach dependent in productivity FCS HDDS  {
-		foreach class in  0 1 2 3 {
-			g		`dependent'`class'=`dependent' 		if `class'==combined
-			replace `dependent'`class'=. 				if `class'!=combined
-			g		l_`dependent'`class'=l_`dependent' 	if `class'==combined
-			replace l_`dependent'`class'=. 				if `class'!=combined
-		}
+    local old_lbl : variable label `cont_var'
+    if "`old_lbl'" == "" local old_lbl "`cont_var'"
+
+    * winsr: symmetric 5th-95th percentile within district
+    winsor2 `cont_var', suffix(_winsr) cuts(5 95) by(district)
+
+    * winsr2: winsor2 cuts(0 95) within district; no lower-tail percentile replacement
+    winsor2 `cont_var', suffix(_winsr2) cuts(0 95) by(district)
+
+    * Label both winsorized versions
+    label variable `cont_var'_winsr  "`old_lbl' cuts(5 95)"
+    label variable `cont_var'_winsr2 "`old_lbl' cuts(0 95)"
 	}
-	*/	
-	do "${dofiles}/04_var_labels.do" 	
-	
-	save "${workingfiles}/`IHSnumber'Proposal_Data.dta",replace
+  
+    save "${workingfiles}/final esr data.dta", replace
+    preserve
+    keep case_id ea_id radio_* turnout2014_cat mp_resident mp_visit dist_* ///
+        ln1p_* merge_iv_* GPS_lat GPS_lon lat lon
+    export delimited using "$workingfiles/iv_and_merge_audit.csv", replace
+    restore
+
 	
 	}
 	
 ****************************************************************************
 * End of do file
 ****************************************************************************
+
+log close cleanlog

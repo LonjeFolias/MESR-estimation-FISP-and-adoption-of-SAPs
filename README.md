@@ -7,7 +7,7 @@ The study examines FISP participation and adoption of sustainable agricultural p
 **Author:** Lonjezo Erick Folias  
 **Contact:** lonjefolias@hotmail.com
 
-## Research design
+## Regimes and Research design
 
 | Code | FISP | SAP adoption | Regime |
 |---|---|---|---|
@@ -21,8 +21,8 @@ SAP adoption in the active cleaner covers six soil and water conservation practi
 The estimation workflow includes:
 
 1. Regime profiles and unconditional outcome differences.
-2. **Multinomial probit** participation determinants and average marginal effects.
-3. A **multinomial logit first stage** and regime-specific continuous-outcome regressions with **DMF(0) correction** for multinomial endogenous switching regression (MESR).
+2. **First stage:** A **multinomial logit first stage** participation determinants and average marginal effects.
+3. **Second stage:** Regime-specific continuous-outcome regressions with **DMF(0) correction** for **multinomial endogenous switching regression (MESR)**.
 4. ATT, ATU, ATE, heterogeneity measures and coupled-versus-standalone comparisons.
 5. Excluded-variable relevance/falsification tests and probability-overlap diagnostics.
 

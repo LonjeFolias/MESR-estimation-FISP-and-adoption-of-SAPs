@@ -7,6 +7,15 @@ The study examines FISP participation and adoption of sustainable agricultural p
 **Author:** Lonjezo Erick Folias  
 **Contact:** lonjefolias@hotmail.com
 
+## Replication status — 20 October 2026
+
+**Not yet validated by a full Stata execution or a numerical comparison with the report.**
+The original final-label dependency `004_labels.do` is still required. Cleaning now stops immediately if it is absent, before modifying datasets.
+
+A source audit found and repaired two support-script incompatibilities: the earlier keep-list discarded maize/coordinate fields needed later, and the climate merge referenced an undefined temporary-file macro. No outcome formulas, samples, instruments, bootstrap settings, treatment-effect formulas or estimation tables were edited. See [the follow-up audit](docs/AUDIT_2026_10_20.md).
+
+The supplied estimation source writes `10_15` results. The available reference report is `MESR_results_main_10_10.docx`; exact equality has not been established. Use the data, source files and report from the same run before claiming replication.
+
 ## Regimes and Research design
 
 | Code | FISP | SAP adoption | Regime |
@@ -21,7 +30,7 @@ SAP adoption in the active cleaner covers six soil and water conservation practi
 The estimation workflow includes:
 
 1. Regime profiles and unconditional outcome differences.
-2. **First stage:** A **multinomial logit first stage** participation determinants and average marginal effects.
+2. **Determinants:** Multinomial probit participation equations and average marginal effects; a separate multinomial logit supplies the MESR selection correction.
 3. **Second stage:** Regime-specific continuous-outcome regressions with **DMF(0) correction** for **multinomial endogenous switching regression (MESR)**.
 4. ATT, ATU, ATE, heterogeneity measures and coupled-versus-standalone comparisons.
 5. Excluded-variable relevance/falsification tests and probability-overlap diagnostics.

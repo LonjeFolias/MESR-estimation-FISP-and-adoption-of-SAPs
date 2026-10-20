@@ -416,6 +416,6 @@ rename llat lat
 rename llong lon
 
 
-merge m:1 lon lat  using 	``IHSnumber'cru_clim_vars'
+merge m:1 lon lat  using 	`cru_clim_vars'
 keep if _merge == 3
 drop _merge

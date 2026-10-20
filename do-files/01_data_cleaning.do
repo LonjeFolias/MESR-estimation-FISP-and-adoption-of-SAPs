@@ -38,6 +38,14 @@ foreach folder in ihsv workingfiles dofiles {
         exit 198
     }
 }
+* Fail before constructing or overwriting data if the supplied dependency is absent.
+* This is a distinct final-label script; do not substitute the earlier helper.
+capture confirm file "$dofiles/004_labels.do"
+if _rc {
+    di as error "Required do-files/004_labels.do is missing. Restore your original final-label script."
+    exit 601
+}
+
 capture log close cleanlog
 log using "$workingfiles/cleaning_audit.log", text replace name(cleanlog)
 

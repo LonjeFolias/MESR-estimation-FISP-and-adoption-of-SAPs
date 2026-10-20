@@ -1,0 +1,32 @@
+[
+  {
+    "source": "00_master-dofile.do",
+    "packaged": "00_master-dofile.do",
+    "commands": 31,
+    "preserved": true
+  },
+  {
+    "source": "001_data_cleaning.do",
+    "packaged": "do-files/01_data_cleaning.do",
+    "commands": 675,
+    "preserved": true
+  },
+  {
+    "source": "07_MESR_main.do",
+    "packaged": "do-files/02_MESR_main.do",
+    "commands": 733,
+    "preserved": true
+  },
+  {
+    "source": "07_MESR_programs.do",
+    "packaged": "do-files/02.1_MESR_programs.do",
+    "commands": 276,
+    "preserved": true
+  },
+  {
+    "source": "graph.do",
+    "packaged": "do-files/03_graphs.do",
+    "commands": 136,
+    "preserved": true
+  }
+]

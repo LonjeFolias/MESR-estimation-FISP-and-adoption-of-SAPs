@@ -1,5 +1,7 @@
 # Verification of documentation changes
 
+**Historical check, superseded in part by [the 20 October audit](AUDIT_2026_10_20.md).** Compatibility repairs after this check are documented there.
+
 19 October 2026.
 
 All eight active scripts retain their executable lines after removing comments and reversing only the allowed call-filename substitutions. Executable labels, tables and graph commands are included in the comparison.

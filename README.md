@@ -12,7 +12,7 @@ The four mutually exclusive regimes are FISP only (1), SAPs only (2), FISP + SAP
 2. Set `projectfolder` to the local data/results project and `github` to the **parent directory containing this repository clone**.
 3. Choose the stages in Part 2 of the master, then run the whole master file.
 
-The supplied switches are **cleaning = 0, estimation = 0, presentation export = 1**. This is an export-only rerun using completed estimation results. For a full run, set all three to 1. For estimation from already cleaned data, use 0 / 1 / 1. Exporting alone does not repeat the bootstrap.
+The supplied switches are **cleaning = 0, estimation = 0, presentation export = 1**. This is an export-only rerun using completed estimation results. For a full run, set all three to 1. For estimation from already cleaned data, use 0 / 1 / 1.
 
 ```stata
 global projectfolder "C:/path/to/AERC 2026"
@@ -29,7 +29,7 @@ global github        "C:/path/to/GitHub"
 | `do-files/03_ihsvclimate.do` | Match CRU rainfall and temperature to households | Called by cleaning |
 | `do-files/04_labels.do` | Variable labels | Called by cleaning |
 | `do-files/06_selmlog.do` | Bundled reference implementation of `selmlog` | Not called by current MESR workflow |
-| `do-files/07_MESR_main.do` | Descriptives, models, diagnostics, bootstrap, Word and saved table inputs | Through master |
+| `do-files/07_MESR_main.do` | Descriptives, models, diagnostics, Word and saved table inputs | Through master |
 | `do-files/07_MESR_programs.do` | MESR, Word and LaTeX helper programs | Called by main estimation |
 | `do-files/08_export_presentation.do` | Overleaf-ready table fragments and figures | Through master, after completed estimation |
 
@@ -52,14 +52,12 @@ The climate helper retains the supplied setting `runningscript_firsttime "NO"`, 
 
 ## Results and presentation workflow
 
-The main estimation file reads **`$data/final esr data.dta`**, with `$data` defaulting to `$workingfiles`. Its sample checks, covariates, instruments, 500-replication cluster bootstrap, seed and treatment-effect definitions are retained from the author's supplied final file.
+The estimation input is **`final esr data.dta`**, saved by the cleaner in **`data/02_workingfiles/`**. The main file reads `$data/final esr data.dta`, with `$data` defaulting to `$workingfiles`. You do not need to supply a separate estimation-sample dataset. The estimation file applies its sample checks to the final cleaned data and saves its own analysis outputs.
 
 Principal outputs:
 
 - `$result/MESR_tables_10_15.docx`: Word results.
-- `$result/MESR_analysis_sample_10_15.dta`: estimation sample.
 - `$result/MNP_10_15.ster`, `MNL_10_15.ster`, `MESR_main_trap_10_15.ster`: saved models.
-- `$result/MESR_main_draws_10_15.dta`: bootstrap draws.
 - `$result/latex/data/table_*.dta`: exact formatted table cells and metadata.
 - `$result/latex/export_complete.txt`: completed-main-export marker.
 

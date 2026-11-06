@@ -1,0 +1,10 @@
+# Local data and generated analysis output
+/data/
+/result/
+/results/
+*.dta
+*.ster
+*.log
+*.smcl
+*.stswp
+.DS_Store

@@ -1,40 +1,14 @@
-******************************************************************************
-*                                                                            *
-*  Study: Farm input subsidies (FISP) and adoption of sustainable            *
-*  agricultural practices in Malawi: synergies and implications on farm      *
-*  productivity and household resilience to food shocks                      *
-*                                                                            *
-*  File: 02.1_MESR_programs.do                                               *
-*  Role: Estimation helper program definitions                               *
-*  Author: Lonjezo Erick Folias                                              *
-*  Email: lonjefolias@hotmail.com                                            *
-*  Phone: 0992 888 003                                                       *
-*  Documentation revision: 19 October 2026                                   *
-*                                                                            *
-*  Purpose: Defines fmt_b, pub_table, ipwra_linear_fast, say and mesr_dmf    *
-*  for the main analysis.                                                    *
-*                                                                            *
-*  Inputs: Loaded data and options supplied by the calling estimation        *
-*  script.                                                                   *
-*                                                                            *
-*  Outputs: Programs used for formatting, selection correction, treatment    *
-*  effects and optional IPWRA calculations.                                  *
-*                                                                            *
-*  Run order: Loaded automatically by 02_MESR_main.do; do not run as an      *
-*  independent analysis.                                                     *
-*                                                                            *
-*  Notes: Program bodies, prediction formulas and returned quantities are    *
-*  preserved.                                                                *
-*                                                                            *
-******************************************************************************
-
+/* 07_MESR_programs_10_15.do - shared helper programs 
+   - fmt_b            : coefficient with stars, SE in brackets, z-value
+   - pub_table        : journal-style Word table (no grid; a line above the
+                        first row and below the last row; optional merged
+                        header cells and italic group-heading rows)
+   - mesr_dmf         : MESR, DMF(0) selection correction (unchanged from 10_10)
+   - ipwra_linear_fast: IPWRA with ATT (unchanged from 10_10)
+   - say              : plain paragraph in the Word file                     */
 version 16
 
 * fmt_b: formats a coefficient with stars, its SE in brackets and its z-value
-
-******************************************************************************
-**# PROGRAM 1: COEFFICIENT AND INFERENCE FORMATTING
-******************************************************************************
 capture program drop fmt_b
 program define fmt_b, rclass
     args b se dec
@@ -63,10 +37,6 @@ end
 *   spans()   : merged header cells, "row:col:ncols" items, RIGHT-TO-LEFT
 *   fsize()   : font size inside the table (default 9)
 *   rulehead  : also draw a line under the header rows
-
-******************************************************************************
-**# PROGRAM 2: WORD TABLE FORMATTING
-******************************************************************************
 capture program drop pub_table
 program define pub_table
     syntax using/, NAme(string) TNum(string) TItle(string) ///
@@ -106,16 +76,15 @@ program define pub_table
         putdocx paragraph
         putdocx text (`"`note'"'), font("Times New Roman", 8)
     }
+    * Same already-formatted table cells as Word; export only, no re-estimation.
+    mesr_tex_export, name("`name'") tnum("`tnum'") title(`"`title'"') ///
+        note(`"`note'"') headrows(`headrows') groups("`groups'") spans("`spans'")
     restore
 end
 
 * Staged linear IPWRA: same point-estimation recipe as native teffects IPWRA,
 * with joint EA- inference supplied by the caller. All three outcomes
 * share ONE re-estimated treatment model per draw. No numerical EE solver.
-
-******************************************************************************
-**# PROGRAM 3: STAGED LINEAR IPWRA HELPER
-******************************************************************************
 capture program drop ipwra_linear_fast
 program define ipwra_linear_fast, eclass
     version 16
@@ -187,10 +156,6 @@ program define ipwra_linear_fast, eclass
 end
 
 * say: adds a plain paragraph of explanation to the Word file
-
-******************************************************************************
-**# PROGRAM 4: WORD PARAGRAPH HELPER
-******************************************************************************
 capture program drop say
 program define say
     args txt
@@ -199,10 +164,6 @@ program define say
 end
 
 
-
-******************************************************************************
-**# PROGRAM 5: MNL AND DMF(0) SWITCHING REGRESSION
-******************************************************************************
 capture program drop mesr_dmf
 program define mesr_dmf, eclass
     version 16
@@ -364,3 +325,212 @@ program define mesr_dmf, eclass
     * mesr_dmf again without options to display results -> "option outcomes() required".
 end
 
+
+* LaTeX export only: no estimation, prediction, filtering or imputation.
+capture program drop mesr_tex_escape
+program define mesr_tex_escape, rclass
+    * Empty table cells and omitted notes are valid: do not require text().
+    syntax [, TEXT(string)]
+    local t `"`text'"'
+    local t = subinstr(`"`t'"', char(92), char(1), .)
+    foreach ch in 123 125 38 37 36 35 95 {
+        local t = subinstr(`"`t'"', char(`ch'), char(92)+char(`ch'), .)
+    }
+    local t = subinstr(`"`t'"', "~", "\textasciitilde{}", .)
+    local t = subinstr(`"`t'"', "^", "\textasciicircum{}", .)
+    local t = subinstr(`"`t'"', char(1), "\textbackslash{}", .)
+    local t = subinstr(`"`t'"', uchar(160), " ", .)
+    local t = subinstr(`"`t'"', "−", "-", .)
+    local t = subinstr(`"`t'"', "–", "\textendash{}", .)
+    local t = subinstr(`"`t'"', "χ²", "$\chi^2$", .)
+    local t = subinstr(`"`t'"', "λ", "$\lambda$", .)
+    local t = subinstr(`"`t'"', "ρ", "$\rho$", .)
+    local t = subinstr(`"`t'"', "σ", "$\sigma$", .)
+    local t = subinstr(`"`t'"', "≥", "$\geq$", .)
+    local t = subinstr(`"`t'"', "≤", "$\leq$", .)
+    local t = subinstr(`"`t'"', "±", "$\pm$", .)
+    local t = subinstr(`"`t'"', "×", "$\times$", .)
+    local t = subinstr(`"`t'"', "°", "$^{\circ}$", .)
+    local t = subinstr(`"`t'"', "²", "$^2$", .)
+    local t = subinstr(`"`t'"', char(10), " ", .)
+    local t = subinstr(`"`t'"', char(13), " ", .)
+    return local tex `"`t'"'
+end
+
+capture program drop mesr_tex_begin
+program define mesr_tex_begin
+    global MESR_TEXROOT "$result/latex"
+    global MESR_TEX_N 0
+    capture mkdir "$MESR_TEXROOT"
+    capture mkdir "$MESR_TEXROOT/data"
+    capture mkdir "$MESR_TEXROOT/tables"
+    tempname fh
+    file open `fh' using "$MESR_TEXROOT/export_complete.txt", write text replace
+    file write `fh' "INCOMPLETE" _n
+    file close `fh'
+    file open `fh' using "$MESR_TEXROOT/MESR_annex_tables.tex", write text replace
+    file write `fh' "% Generated from the same string datasets as the Word tables." _n
+    file write `fh' "% Upload this SINGLE file beside main.tex in Overleaf." _n
+    file close `fh'
+    file open `fh' using "$MESR_TEXROOT/MESR_research_tables.tex", write text replace
+    file write `fh' "\documentclass[10pt,a4paper]{article}" _n ///
+        "\usepackage[margin=1.5cm]{geometry}" _n ///
+        "\usepackage[T1]{fontenc}\usepackage[utf8]{inputenc}" _n ///
+        "\usepackage{booktabs,longtable,array,graphicx,helvet,caption}" _n ///
+        "\renewcommand{\familydefault}{\sfdefault}" _n ///
+        "\begin{document}" _n
+    file close `fh'
+end
+
+* Formats one row of the currently loaded string-table dataset.
+capture program drop mesr_tex_row
+program define mesr_tex_row, rclass
+    syntax, ROW(integer) VARS(string) [HEAD(integer 0) SPANS(string) GROUPS(string)]
+    local nc : word count `vars'
+    local c = 1
+    local line ""
+    while `c'<=`nc' {
+        local v : word `c' of `vars'
+        local value = `v'[`row']
+        quietly mesr_tex_escape, text(`"`value'"')
+        local value `"`r(tex)'"'
+        if `head' local value = subinstr(`"`value'"', "z-value", "z-\allowbreak value", .)
+        local width 1
+        foreach sp of local spans {
+            tokenize "`sp'", parse(":")
+            if `row'==`1' & `c'==`3' local width `5'
+        }
+        if `head' local value `"\textbf{`value'}"'
+        if `width'>1 local value `"\multicolumn{`width'}{c}{`value'}"'
+        if `c'==1 & strpos(" `groups' "," `row' ") local value `"\textit{`value'}"'
+        if `c'>1 local line `"`line' & "'
+        local line `"`line'`value'"'
+        local c = `c' + `width'
+    }
+    return local tex `"`line' \\"'
+end
+
+capture program drop mesr_tex_export
+program define mesr_tex_export
+    syntax, NAME(string) TNUM(string) TITLE(string) [NOTE(string) ///
+        HEADROWS(integer 1) GROUPS(string) SPANS(string)]
+    if "$MESR_TEXROOT"=="" exit
+    unab vl : _all
+    local nr = _N
+    local nc : word count `vl'
+    local first : word 1 of `vl'
+    global MESR_TEX_N = $MESR_TEX_N + 1
+    local serial = string($MESR_TEX_N,"%02.0f")
+    * Store the exact display values and metadata for export-only reruns.
+    char _dta[mesr_name] `"`name'"'
+    char _dta[mesr_tnum] `"`tnum'"'
+    char _dta[mesr_title] `"`title'"'
+    char _dta[mesr_note] `"`note'"'
+    char _dta[mesr_headrows] "`headrows'"
+    char _dta[mesr_groups] "`groups'"
+    char _dta[mesr_spans] "`spans'"
+    quietly save "$MESR_TEXROOT/data/table_`serial'.dta", replace
+    quietly export delimited using "$MESR_TEXROOT/data/table_`serial'.csv", replace
+    quietly mesr_tex_escape, text(`"`tnum' `title'"')
+    local caption `"`r(tex)'"'
+    quietly mesr_tex_escape, text(`"`note'"')
+    local footnote `"`r(tex)'"'
+    * Fixed, wrapping widths: more space to labels, less to z-values.
+    local spec ""
+    forvalues c=1/`nc' {
+        local w = cond(`c'==1,.26,.64/(`nc'-1))
+        if `nc'==9 & `c'>1 local w = cond(mod(`c',2)==0,.11,.055)
+        if `nc'==2 local w = cond(`c'==1,.65,.25)
+        if "`name'"=="t2" local w = cond(`c'==1,.23,cond(`c'==2,.48,.19))
+        if "`name'"=="t6" local w = cond(`c'==1,.64,.13)
+        local wtxt = string(`w',"%6.4f")
+        local spec `"`spec'>{\raggedright\arraybackslash}p{`wtxt'\linewidth}"'
+    }
+    tempname tf af rf
+    file open `tf' using "$MESR_TEXROOT/tables/table_`serial'.tex", write text replace
+    file write `tf' "\begingroup\fontsize{8.5}{10.5}\selectfont" _n ///
+        "\setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.15}" _n ///
+        "\begin{longtable}{@{}`spec'@{}}" _n ///
+        `"\caption*{\textbf{`caption'}}\\"' _n "\toprule" _n
+    forvalues rr=1/`headrows' {
+        quietly mesr_tex_row, row(`rr') vars("`vl'") head(1) spans("`spans'")
+        file write `tf' `"`r(tex)'"' _n
+    }
+    file write `tf' "\midrule\endfirsthead" _n "\toprule" _n
+    forvalues rr=1/`headrows' {
+        quietly mesr_tex_row, row(`rr') vars("`vl'") head(1) spans("`spans'")
+        file write `tf' `"`r(tex)'"' _n
+    }
+    file write `tf' "\midrule\endhead" _n
+    local start = `headrows'+1
+    forvalues rr=`start'/`nr' {
+        quietly mesr_tex_row, row(`rr') vars("`vl'") groups("`groups'")
+        file write `tf' `"`r(tex)'"' _n
+    }
+    file write `tf' "\bottomrule\end{longtable}" _n ///
+        `"{\footnotesize `footnote'\par}\endgroup\clearpage"' _n
+    file close `tf'
+    file open `rf' using "$MESR_TEXROOT/MESR_research_tables.tex", write text append
+    file write `rf' "\input{tables/table_`serial'.tex}" _n
+    file close `rf'
+
+    * Identify SE rows, keeping each coefficient and its SE on one slide.
+    tempvar se group
+    quietly gen byte `se' = 0
+    quietly gen byte `group' = 0
+    foreach v of local vl {
+        if "`v'"!="`first'" quietly replace `se'=1 if `first'=="" & substr(strtrim(`v'),1,1)=="("
+    }
+    foreach r of local groups {
+        quietly replace `group'=1 in `r'
+    }
+    local part 0
+    file open `af' using "$MESR_TEXROOT/MESR_annex_tables.tex", write text append
+    while `start'<=`nr' {
+        local ++part
+        local stop = min(`nr',`start'+5)
+        if "`name'"=="t2" local stop=min(`nr',`start'+2)
+        if `nc'==2 local stop=min(`nr',`start'+3)
+        * Treatment-effects panels: four rows per regime (ATT/ATU/BH/ATE).
+        if substr("`name'",1,1)=="e" & `nc'==6 local stop=min(`nr',`start'+3)
+        if `stop'<`nr' {
+            if `se'[`stop'+1]==1 local --stop
+            if `group'[`stop']==1 local --stop
+        }
+        if `stop'<`start' local stop=min(`nr',`start'+1)
+        file write `af' "\def\slideid{`tnum' p`part'}" _n ///
+            "\begin{frame}[t,label=mesr-`name'-`part']" _n ///
+            `"\frametitle{\fontsize{12}{14}\selectfont `caption' (continued `part')}"' _n ///
+            "\fontsize{8.3}{10}\selectfont\setlength{\tabcolsep}{2pt}" _n ///
+            "\renewcommand{\arraystretch}{1.12}" _n ///
+            "\begin{tabular}{@{}`spec'@{}}\toprule" _n
+        forvalues rr=1/`headrows' {
+            quietly mesr_tex_row, row(`rr') vars("`vl'") head(1) spans("`spans'")
+            file write `af' `"`r(tex)'"' _n
+        }
+        file write `af' "\midrule" _n
+        forvalues rr=`start'/`stop' {
+            quietly mesr_tex_row, row(`rr') vars("`vl'") groups("`groups'")
+            file write `af' `"`r(tex)'"' _n
+        }
+        file write `af' "\bottomrule\end{tabular}" _n ///
+            `"\par\vspace{.12cm}{\fontsize{6.5}{8}\selectfont `footnote'\par}"' _n ///
+            "\vfill{\fontsize{6}{7}\selectfont Generated by the Stata table export; `tnum'}" _n ///
+            "\end{frame}" _n
+        local start = `stop'+1
+    }
+    file close `af'
+    drop `se' `group'
+end
+
+capture program drop mesr_tex_finish
+program define mesr_tex_finish
+    tempname fh
+    file open `fh' using "$MESR_TEXROOT/MESR_research_tables.tex", write text append
+    file write `fh' "\end{document}" _n
+    file close `fh'
+    file open `fh' using "$MESR_TEXROOT/export_complete.txt", write text replace
+    file write `fh' "$MESR_TEX_N" _n
+    file close `fh'
+    di as result "LaTeX tables: $MESR_TEXROOT (tables exported: $MESR_TEX_N)"
+end

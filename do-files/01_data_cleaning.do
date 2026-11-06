@@ -1,32 +1,20 @@
-******************************************************************************
-*                                                                            *
-*  Study: Farm input subsidies (FISP) and adoption of sustainable            *
-*  agricultural practices in Malawi: synergies and implications on farm      *
-*  productivity and household resilience to food shocks                      *
-*                                                                            *
-*  File: 01_data_cleaning.do                                                 *
-*  Role: Household data construction                                         *
-*  Author: Lonjezo Erick Folias                                              *
-*  Email: lonjefolias@hotmail.com                                            *
-*  Phone: 0992 888 003                                                       *
-*  Documentation revision: 19 October 2026                                   *
-*                                                                            *
-*  Purpose: Constructs and merges the IHS5 maize-household analysis data,    *
-*  outcomes, regimes and candidate instruments.                              *
-*                                                                            *
-*  Inputs: IHS5 raw modules, crop-unit conversion factors, CRU inputs and    *
-*  cleaning support scripts.                                                 *
-*                                                                            *
-*  Outputs: $workingfiles/final esr data.dta plus intermediate and audit     *
-*  files.                                                                    *
-*                                                                            *
-*  Run order: Called by 00_master-dofile.do; calls 01.1, 01.2 and 01.3       *
-*  internally.                                                               *
-*                                                                            *
-*  Notes: Also requires the existing local 004_labels.do, which was not      *
-*  supplied. All transformations and variable labels are preserved.          *
-*                                                                            *
-******************************************************************************
+   * *
+******************************************************************* *
+   * ******************************************************************** *
+   *                                                                      *
+   *               Farm input subsidies (FISP) and adoption of sustainable* 
+   *               agricultural practices in Malawi: synergies and		  * 
+   *               implications on farm productivity and household		  * 
+   *               resilience to food shocks                              *
+   *																	  *
+   *               Model Estimation  DO_FILE : This do file estimates 	  *
+   *			   1)clean Malawi Integrated household survey (IHS) data  *
+   *               														  *                                
+   *				Author : Lonjezo Erick Folias                         *
+   *				Number : 0992 888 003   							  *
+   *				Email  : lonjefolias@hotmail.com					  *
+   * ******************************************************************** *
+   * ********************************************************
 
 version 17
 set more off
@@ -38,20 +26,8 @@ foreach folder in ihsv workingfiles dofiles {
         exit 198
     }
 }
-* Fail before constructing or overwriting data if the supplied dependency is absent.
-* This is a distinct final-label script; do not substitute the earlier helper.
-capture confirm file "$dofiles/004_labels.do"
-if _rc {
-    di as error "Required do-files/004_labels.do is missing. Restore your original final-label script."
-    exit 601
-}
-
 capture log close cleanlog
 log using "$workingfiles/cleaning_audit.log", text replace name(cleanlog)
-
-******************************************************************************
-**# PART 0: PATH CHECKS AND DATA CONSTRUCTION HELPERS
-******************************************************************************
 capture program drop _raw
 program define _raw
     args filename
@@ -112,7 +88,7 @@ global ihsvlock   ihsv // a lock to apply for 	IHS5 only
    
 	
 foreach IHSnumber in  ihsv  {			
-**# HOUSEHOLD ROSTER AND HEAD CHARACTERISTICS
+**# Bookmark #1
 use "${`IHSnumber'}/hh_mod_b.dta", clear 
 		
 		
@@ -121,11 +97,12 @@ use "${`IHSnumber'}/hh_mod_b.dta", clear
 		}
 		
 		
-		* Keep household-head attributes using hh_b04 == 1.
+		*Line 30 to 46 keeps attributes of the hh head whose value is 1 in hh_b04
 		*Age
 		bysort case_id: g  age=hh_b05a if hh_b04==1 
-
-		* Dependency ratio		
+		gen agesq = age^2
+		
+		*Dependancy ratio		
 		bysort 	case_id: 	egen 	a=count(PID) 	if  hh_b05a<=14  | hh_b05a>64
 		bysort 	case_id: 	egen	dependants=max(a) 	
 		
@@ -143,7 +120,7 @@ use "${`IHSnumber'}/hh_mod_b.dta", clear
 		*Alduts
 		bysort case_id : egen alduts=count(PID) if hh_b05a>=15
 		
-		* Marital status 
+		*Maritial 
 		bysort case_id: g  marital=hh_b24 if hh_b04==1
 		la val marital hh_b24 
 		
@@ -157,9 +134,9 @@ use "${`IHSnumber'}/hh_mod_b.dta", clear
 		replace years_village=age 		if hh_b12==.a | hh_b12==.
 		
 		
-		keep case_id age hh_Size alduts marital gender years_village HHID dependency
+		keep case_id age hh_Size alduts marital gender years_village HHID dependency agesq
 		
-		collapse (firstnm)  HHID (max) age hh_Size alduts years_village marital dependency gender, by (case_id)
+		collapse (firstnm)  HHID (max) age hh_Size alduts years_village marital dependency gender agesq, by (case_id)
 		
 		tempfile tempfile `IHSnumber'a
 
@@ -189,7 +166,7 @@ use "${`IHSnumber'}/hh_mod_b.dta", clear  // in order to capture the right PID f
 		bysort case_id: g  educ=hh_c08 if hh_b04==1
 		la val educ hh_c08
 		
-**# HEAD EDUCATION MERGE
+**# Bookmark #1
 		keep  case_id educ 
 		collapse (max) educ , by (case_id)
 		merge 1:1 case_id using ``IHSnumber'a', nogen
@@ -279,6 +256,7 @@ use "${`IHSnumber'}/hh_mod_u.dta", clear
 		g irregularrains=1 if hh_u0a==1101 & hh_u01==1	
 		keep case_id  drought floods irregularrains
 		collapse (max) drought floods irregularrains, by (case_id)
+		g shock=1 if drought==1 | floods==1
 		merge 1:1 case_id using ``IHSnumber'c_b', nogen
 		
 		tempfile `IHSnumber'c_c
@@ -315,9 +293,9 @@ save  ``IHSnumber'c_c', replace
 		tempfile `IHSnumber'ob
 save  	``IHSnumber'ob', replace 
 
-	* Expenditure construction support 
+	*Ependiture do file 
 	
-	do "${dofiles}/01.1_expenditure.do" 
+	do "${dofiles}/02_expenditure.do" 
 
 	
 **# 	Off_farm
@@ -650,7 +628,7 @@ use "${`IHSnumber'}/ag_mod_i.dta" , clear
 	* Both combined and geodetails files must carry these keys for CRU matching.
     confirm numeric variable lat
     confirm numeric variable lon
-    do "${dofiles}/01.2_`IHSnumber'climate.do"
+    do "${dofiles}/03_`IHSnumber'climate.do"
     confirm numeric variable lat
     confirm numeric variable lon
     confirm numeric variable GPS_lat
@@ -685,6 +663,8 @@ use "${`IHSnumber'}/ag_mod_i.dta" , clear
 	}
 
 	g fisp_saps=1 if input_subsidy==1 | saps==1
+	
+	clonevar fisp=input_subsidy
 	
 	recode saps fisp_saps (.=0) 
 	
@@ -785,15 +765,14 @@ use "${`IHSnumber'}/ag_mod_i.dta" , clear
 		
     quietly ds
     *local constructed_before_labels `r(varlist)'
-    do "${dofiles}/01.3_var_labels.do"
+    do "${dofiles}/04_labels.do"
     * Labels may add aliases and regime fields; they must not remove variables.
     *foreach v of local constructed_before_labels {
      *   confirm variable `v'
     *}
 	
 
-    **# CANDIDATE INSTRUMENTS AND MERGE AUDITS
-* Add candidate instruments after the original construction/labels workflow.
+    * Add candidate instruments after the original construction/labels workflow.
     quietly ds
     local legacy_variables `r(varlist)'
     tempfile iv_advice iv_community iv_geo iv_education iv_head
@@ -993,22 +972,54 @@ save `iv_community', replace
     label var dist_bank_km "Bank access distance km; facility presence coded zero proxy"
     label var dist_mfi_km "Microfinance access distance km; presence coded zero proxy"
     label var dist_extension_km "Extension-officer access distance km; residence coded zero proxy"
-    **# FINAL LABEL PASS AND ANALYSIS DATA EXPORT
-* Final labels pass: run AFTER all IV additions and household collapses.
-* Required existing local dependency: 004_labels.do (not included in uploads).
-    do "${dofiles}/004_labels.do"
+    * Final labels pass: run AFTER all IV additions and household collapses.
+    do "${dofiles}/04_labels.do"
     isid case_id
   
   
+    **********************************************************************
+    * FOCUSED REPLICATION FIX: complete the three report-era zero categories.
+    * Added 4 November 2026; all other cleaning and estimation code retained.
+    * The earlier supplied report-matching data used zero for these entries.
+    * off_farm and TLU zeros below restore that historical coding convention;
+    * they are not newly verified negatives from raw skip/ownership questions.
+    * Do not apply this convention automatically to other datasets/variables.
+    **********************************************************************
+    assert inlist(shock,0,1) | missing(shock)
+    assert inlist(off_farm,0,1) | missing(off_farm)
+    assert TLU>=0 if !missing(TLU)
+
+    quietly count if missing(shock) & drought==0 & floods==0
+    local fixed_shock = r(N)
+    replace shock = 0 if missing(shock) & drought==0 & floods==0
+    assert shock==(drought==1 | floods==1) if !missing(drought,floods)
+
+    quietly count if missing(off_farm)
+    local fixed_offfarm = r(N)
+    replace off_farm = 0 if missing(off_farm)
+
+    * Complete RAW TLU before winsor2 computes district-specific cutoffs.
+    * Completing only TLU_winsr afterwards would leave the wrong cutoffs.
+    quietly count if missing(TLU)
+    local fixed_tlu = r(N)
+    replace TLU = 0 if missing(TLU)
+
+    di as text "Report-era zero categories restored:"
+    di as text "  shock: " as result `fixed_shock'
+    di as text "  off_farm: " as result `fixed_offfarm'
+    di as text "  raw TLU: " as result `fixed_tlu'
+    assert !missing(shock,off_farm,TLU)
+    * Existing winsorisation, save commands and remaining code follow unchanged.
+
 	foreach cont_var of varlist  productivity TLU {
 
     local old_lbl : variable label `cont_var'
     if "`old_lbl'" == "" local old_lbl "`cont_var'"
 
-    * winsr: symmetric 5th-95th percentile within district
+    * winsr: symmetric 5th-95th percentile by EA
     winsor2 `cont_var', suffix(_winsr) cuts(5 95) by(district)
 
-    * winsr2: winsor2 cuts(0 95) within district; no lower-tail percentile replacement
+    * winsr2: floor at 0, cap at 95th percentile by EA
     winsor2 `cont_var', suffix(_winsr2) cuts(0 95) by(district)
 
     * Label both winsorized versions

@@ -17,7 +17,7 @@
 *                                                                            *
 *  Outputs: Folder globals; execution of enabled stages.                     *
 *                                                                            *
-*  Run order: Run first. Cleaning is enabled; estimation is disabled in      *
+*  Run order: Run first. Export-only is enabled; cleaning and estimation are disabled in      *
 *  this supplied version.                                                    *
 *                                                                            *
 *  Notes: Installation block remains disabled. See README for prerequisites  *
@@ -129,7 +129,7 @@ if (0) {
    *
    **#       PART 2: EXECUTION SWITCHES FOR CLEANING AND ESTIMATION
    *
-   *           - Cleaning is enabled in the supplied master.
+   *           - Cleaning is disabled in the supplied master.
    *           - Estimation is disabled until its switch is changed to 1.
    *           - Keep stage switches separate from installation.
    *
@@ -138,14 +138,14 @@ if (0) {
 *folder*3*End_RunDofiles******************************************************
 *folder will not work properly if the line above is edited
 
-* Current sequence: 01_data_cleaning.do, then 02_MESR_main.do.
-* Estimation loads 02.1_MESR_programs.do automatically.
+* Sequence: 01_data_cleaning.do, 07_MESR_main.do, 08_export_presentation.do.
+* Cleaning loads 02/03/04 helpers; estimation loads 07_MESR_programs.do.
 		
 		
 *Change the if to 1 if you want to run a specific function through the do file 
 
-		* Cleaning stage: enabled in the supplied master (if 1). 
- if (1) {
+		* Cleaning stage: disabled in the supplied master (if 0). 
+ if (0) {
  	
 		do "$dofiles/01_data_cleaning.do" 
  }
@@ -153,11 +153,10 @@ if (0) {
 		
 		* Estimation stage: disabled in the supplied master (if 0). 
  if (0) {
-	do "$dofiles/02_MESR_main.do"
+	do "$dofiles/07_MESR_main.do"
  }
-******************************************************************************
-**# OPTIONAL: ALTERNATIVE OUTCOME DISTRIBUTION GRAPHS
-******************************************************************************
-* Run only after the main estimation has saved its analysis sample.
-* This example remains commented and does not change master execution.
-* do "$dofiles/03_graphs.do" "$result/MESR_analysis_sample_10_15.dta" "$result"
+
+ * exporting estimates into latex for presentations
+  if (1) {
+	do "$dofiles/08_export_presentation.do"
+ }

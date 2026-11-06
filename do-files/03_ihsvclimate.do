@@ -1,52 +1,68 @@
-******************************************************************************
-*                                                                            *
-*  Study: Farm input subsidies (FISP) and adoption of sustainable            *
-*  agricultural practices in Malawi: synergies and implications on farm      *
-*  productivity and household resilience to food shocks                      *
-*                                                                            *
-*  File: 01.2_ihsvclimate.do                                                 *
-*  Role: Cleaning support for climate matching                               *
-*  Author: Lonjezo Erick Folias                                              *
-*  Email: lonjefolias@hotmail.com                                            *
-*  Phone: 0992 888 003                                                       *
-*  Documentation revision: 19 October 2026                                   *
-*                                                                            *
-*  Purpose: Processes CRU precipitation and temperature CSV data and         *
-*  matches climate variables to household locations.                         *
-*                                                                            *
-*  Inputs: CRU cru_pre_2.csv and cru_tmp_2.csv under $weather; saved IHS5    *
-*  geodetails and combined files.                                            *
-*                                                                            *
-*  Outputs: Climate variables merged into the household data in memory.      *
-*                                                                            *
-*  Run order: Called internally by 01_data_cleaning.do for the ihsv loop.    *
-*                                                                            *
-*  Notes: The supplied runningscript_firsttime=Yes setting and matching      *
-*  calculations are preserved.                                               *
-*                                                                            *
-******************************************************************************
+   * ******************************************************************** *
+   * ******************************************************************** *
+   *                                                                      *
+   *               Lonjezo Folias, lonjefolias@hotmail.com                *
+   *               Climate Data Do file            						  *
+   *																	  *
+   *     Project Title : 												  *
+   *     Farm Input Subsidies and Adoption of Sustainable Agricultural    *
+   *     Practices in Malawi: Synergies and Implications on Farm          * 
+   *     Productivity and Household Food Security                         *
+   * ******************************************************************** *
+   * ******************************************************************** *
+
+   
+          /*
+       ** PURPOSE:      To clean climate data download from Climatic Research Unit
+						https://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.07
+						The data was download in an .nc format and converted into 
+						.cvs format using the ncdf4 package in R
+
+            
+		** OUTLINE: 	PART 1: Restructuring preceptetion data based on time
+                        PART 2: Restructuring temperature data based on time
+						PART 3: Constructing climate variables
+						PART 4: Restructuring lon and lat variables to match LSMS data
+						
+						
+       ** WRITTEN BY:   Lonjezo Folias, lonjefolias@hotmail.com   
+
+       ** Last date modified: 5 February 2026
+       */
+	   
+
+**# PART 2: Restructuring preceptetion data based on time  
+	
+	*NOTE : Lines 41 to 51 will consume much of your time by loading large CSV files. You only need to run them once, the first time. 
+	
+	*ARE YOU RUNNING THIS SCRIPT FOR THE FIRST TIME? YES/NO
+	*INDICATE "Yes" OR "No" IF THE "RUNNINGSCRIPT_FIRSTTIME" LOCAL in line 47
+	
+	macro drop weather
+	global weather					"$rawdata/weather"	
+
+	local cru_pre_2 "${weather}/cru_pre_2.dta"
+	local cru_tmp_2 "${weather}/cru_tmp_2.dta"
+
+	local runningscript_firsttime "NO"
+
+if "`runningscript_firsttime'" == "Yes" {
+    
+    foreach csv in pre tmp {
+        
+        import delimited "${weather}/cru_`csv'_2.csv", clear
+        compress
+        
+        save "`cru_`csv'_2'", replace
+    }
+}
 
 
-******************************************************************************
-**# CLEANING SUPPORT: CALLED BY 01_data_cleaning.do
-******************************************************************************
-local runningscript_firsttime "Yes"
-	
-	if  "`runningscript_firsttime'"=="Yes" {
-		
-		foreach csv in pre tmp {
-			import 	delimited 	"${weather}/cru_`csv'_2.csv", clear 
-			compress 
-			
-			tempfile 	cru_`csv'_2
-			save  		`cru_`csv'_2', replace
-		}	
-		
-	}
-	
-	
-	*import 	delimited 	"${weather}/cru_pre_2.csv", clear 
-	use `cru_pre_2', clear
+use "`cru_pre_2'", clear
+
+local nv = 1
+
+
 	local 	nv = 1
 	
 	
@@ -129,7 +145,9 @@ local nv = 1
 **# PART 3: Restructuring temperature data based on time
 	
 	*import delimited "${weather}/cru_tmp_2.csv", clear 
-	use `cru_tmp_2', clear
+	
+	use "`cru_tmp_2'", clear
+	
 	local nv = 1
 	forvalues y = 1901/2022 {
 		forvalues m = 1/12 {
@@ -416,6 +434,7 @@ rename llat lat
 rename llong lon
 
 
-merge m:1 lon lat  using 	`cru_clim_vars'
+merge m:1 lon lat  using 	``IHSnumber'cru_clim_vars'
 keep if _merge == 3
 drop _merge
+

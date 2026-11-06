@@ -1,33 +1,46 @@
-******************************************************************************
-*                                                                            *
-*  Study: Farm input subsidies (FISP) and adoption of sustainable            *
-*  agricultural practices in Malawi: synergies and implications on farm      *
-*  productivity and household resilience to food shocks                      *
-*                                                                            *
-*  File: 02_MESR_main.do                                                     *
-*  Role: Main estimation and manuscript tables                               *
-*  Author: Lonjezo Erick Folias                                              *
-*  Email: lonjefolias@hotmail.com                                            *
-*  Phone: 0992 888 003                                                       *
-*  Documentation revision: 19 October 2026                                   *
-*                                                                            *
-*  Purpose: Profiles four regimes, estimates multinomial probit              *
-*  determinants and MNL-based MESR with DMF(0) correction, and exports       *
-*  tables and figures.                                                       *
-*                                                                            *
-*  Inputs: Clean analysis data, $data or $workingfiles, $result, and         *
-*  02.1_MESR_programs.do.                                                    *
-*                                                                            *
-*  Outputs: $result/MESR_tables_10_15.docx, figures, analysis sample,        *
-*  estimates, draws and log.                                                 *
-*                                                                            *
-*  Run order: Run after cleaning; loads 02.1_MESR_programs.do                *
-*  automatically.                                                            *
-*                                                                            *
-*  Notes: Preserves B=500, rerun_bootstrap=1 and effect_mode=legacy.         *
-*  Existing 10_15 output filenames are retained.                             *
-*                                                                            *
-******************************************************************************
+* ******************************************************************** *
+*                                                                      *
+*   Coupling Farm Input Subsidies with Sustainable Agricultural        *
+*   Practices in Malawi: adoption regimes and impacts on maize         *
+*   productivity and household food security                          *
+*                                                                      *
+*   REPLICATION FILE FOR THE MANUSCRIPT      						  *
+*                                                                      *
+*   Produces every data table and data figure of the paper, with the   *
+*   same numbering, row/column structure, labels and notes:            *
+*     Table 1   Distribution of households across the four regimes     *
+*     Table 2   Definition of explanatory variables                    *
+*     Table 3   Characteristics by regime, mean (SD) + F-test          *
+*     Table 4   Unconditional outcome differences                      *
+*     Figure 2  Outcome distributions by regime                        *
+*     Table 5   Multinomial probit of regime choice (coef., dy/dx)     *
+*     Table 6   Instrument tests (relevance, falsification)            *
+*     Figure 3  Overlap of predicted regime probabilities              *
+*     Table 7   Common support                                         *
+*     Tables 8, 10, 12  MESR second stage (Coef., Z-value)             *
+*     Tables 9, 11, 13  Treatment effects (ATT, ATU, ATE, BH, TH)      *
+*     Table 14  Coupled versus standalone                              *
+*     Table 15  Summary of treatment effects                           *
+*     Table A1  MESR first-stage multinomial logit (appendix)          *
+*     Table A2  Statistics quoted in the text (appendix)               *
+*   Table 16 (MESR vs IPWRA) is produced by 07_MESR_robustness_10_15.do *
+*   Figure 1 is the conceptual framework (a drawing, not data).        *
+*                                                                      *
+*   Output (in $result):                                               *
+*     MESR_tables_10_15.docx   all tables and figures above            *
+*     Fig2_outcomes_10_15.png, Fig3_overlap_10_15.png                  *
+*     MNP_10_15.ster, MNL_10_15.ster, MESR_main_trap_10_15.ster    *
+*     MESR_analysis_sample_10_15.dta (used by the robustness file)      *
+*     07_MESR_main_10_15.log                                           *
+*                                                                      *
+*   Requirements: Stata 16+, no user-written commands.                 *
+*   Before running, define:  global data    "<folder with data>"       *
+*                            global result  "<results folder>"         *
+*                            global dofiles "<folder with do-files>"   *
+*   Data file: final_esr_data.dta                                      *
+*                                                                      *
+*   Author : Lonjezo Erick Folias  (lonjefolias@hotmail.com)           *
+* ******************************************************************** *
 
 version 16
 clear all
@@ -51,44 +64,118 @@ log using "$result/07_MESR_main_10_15.log", text replace name(mesrlog)
 
 
 
-* Outcome-equation covariates (X), including age and age squared.
+* Outcome-equation covariates (X) - age AND age squared (meeting comment 3)
 global X  age agesq gender educ hh_Size marital2 marital3 marital4 TLU_winsr ///
           shock off_farm avr_yearly_tmp2019 avr_yearly_pre2019          ///
           type2 type3 quality2 quality3 region2 region3 credit extension
-* Excluded variables (Z): included in the selection equation only.
+* Excluded instruments (Z) - selection model only (meeting comment 7)
 global Z  ext_far radio_sap_strict
 * Outcomes, in the order discussed in the paper
 global Y  productivity_winsr HDDS FCS
 
-do "`codefolder'/02.1_MESR_programs.do"
+do "`codefolder'/07_MESR_programs.do"
+
+**********************************************************************
+**# LATEX EXPORT: initialise research tables and the Beamer annex
+* Each pub_table call exports the SAME cells to Word and LaTeX.
+* Sample, estimation, bootstrap and effect formulas are unchanged.
+* Upload $result/latex/MESR_annex_tables.tex beside main.tex in Overleaf.
+* Article: MESR_research_tables.tex plus tables/; saved inputs: data/.
+**********************************************************************
+mesr_tex_begin
+
 
 **********************************************************************
 **# PART 1: Data preparation
 **********************************************************************
 
-local input "$data/final_esr_data.dta"
-capture confirm file "`input'"
-if _rc local input "$data/final esr data.dta"
+* Load the cleaning file's actual output explicitly. The previous code tried
+* final_esr_data.dta first, even when a newer final esr data.dta also existed.
+* Change ONLY this filename if you intentionally use a differently named file.
+local input "$data/final esr data.dta"
+di as text "MESR input dataset: `input'"
+confirm file "`input'"
 use "`input'", clear
 isid case_id
+di as text "Households in input dataset: " _N
 
-* Regime without value labels: 1 FISP only, 2 SAPs only, 3 FISP + SAPs, 4 neither
-gen byte regime = combined_fisp_saps
+* Canonical estimation coding. The supplied cleaning file uses mesr_regime
+* 1=both, 2=FISP only, 3=SAPs only, 4=neither; do not copy those numbers.
+* Leave mesr_regime and all source variables unchanged.
+assert inlist(fisp,0,1) & inlist(saps,0,1)
+gen byte regime = .
+replace regime = 1 if fisp==1 & saps==0
+replace regime = 2 if fisp==0 & saps==1
+replace regime = 3 if fisp==1 & saps==1
+replace regime = 4 if fisp==0 & saps==0
 assert inlist(regime,1,2,3,4)
 assert regime==1 if fisp==1 & saps==0
 assert regime==2 if fisp==0 & saps==1
 assert regime==3 if fisp==1 & saps==1
 assert regime==4 if fisp==0 & saps==0
 
-* Instruments
+* Instruments: same calculation as supplied. Unknown distance stays missing.
 egen long ea_num = group(ea_id)
 gen byte ext_far = dist_extension_km>5 if !missing(dist_extension_km)
 label var ext_far "Extension officer more than 5 km away (1=yes)"
 
-* Analysis sample: complete cases on everything used
-egen byte nmiss = rowmiss($X $Z $Y regime)
-count if nmiss>0
-di as txt "Households dropped for missing values: " r(N)
+* Complete cases on MODEL VARIABLES ONLY. Regime-specific copies such as
+* age1-age4 contain intentional missing values outside their own regime and
+* must not be added to this list. No imputation or new exclusion rule is used.
+local samplevars $X $Z $Y regime
+local samplevars : list uniq samplevars
+foreach v of local samplevars {
+    confirm numeric variable `v'
+}
+egen byte nmiss = rowmiss(`samplevars')
+
+* Record the cause of every potential exclusion before dropping any row.
+tempname mh
+tempfile missaudit
+postfile `mh' str32 variable long missing_N nonmissing_N using "`missaudit'", replace
+foreach v of local samplevars {
+    quietly count if missing(`v')
+    local nm = r(N)
+    local no = _N - `nm'
+    post `mh' ("`v'") (`nm') (`no')
+    if `nm'>0 di as text "Missing `v': " as result `nm'
+}
+postclose `mh'
+preserve
+    use "`missaudit'", clear
+    export delimited using "$result/MESR_missingness_audit.csv", replace
+restore
+quietly count if nmiss>0
+local Ndropped = r(N)
+quietly count if nmiss==0
+local Ncomplete = r(N)
+di as text "Households excluded for missing model values: " as result `Ndropped'
+di as text "Complete-case households retained: " as result `Ncomplete'
+preserve
+    keep if nmiss>0
+    keep case_id `samplevars' nmiss
+    export delimited using "$result/MESR_excluded_households.csv", replace
+restore
+
+* Replication guard: the uploaded 4-Nov dataset gives exactly 7,749 cases.
+* A different count signals a different input file or unresolved missingness.
+* Stop rather than silently run the paper's models on a different sample.
+if `Ncomplete'!=7749 {
+    di as error "STOP: expected 7,749 complete cases; found `Ncomplete'."
+    di as error "Check the printed input path and MESR_missingness_audit.csv."
+    exit 459
+}
+local expected1 451
+local expected2 3164
+local expected3 558
+local expected4 3576
+foreach k in 1 2 3 4 {
+    quietly count if nmiss==0 & regime==`k'
+    if r(N)!=`expected`k'' {
+        di as error "STOP: regime `k' count differs from the manuscript."
+        exit 459
+    }
+}
 keep if nmiss==0
 drop nmiss
 count
@@ -585,7 +672,7 @@ if missing(`Breps') local Breps = `B'
 **# PART 6: Tables 8-15
 **********************************************************************
 
-local OUTNOTE "HH = household; TLU = tropical livestock units. λ1–λ4 = selection-correction terms (Bourguignon et al., 2007) and ρ1–ρ4 = implied correlations between the outcome error and the choice error, for regime 1 (FISP only), 2 (SAPs only), 3 (FISP + SAPs) and 4 (neither); σ = standard deviation of the outcome error; “–” = not defined for the own regime. Standard errors (`Breps' EA-cluster replications of the full two-step procedure) in parentheses. `STAR'"
+local OUTNOTE "HH = household; TLU = tropical livestock units. λ1–λ4 = selection-correction terms (Bourguignon et al., 2007) and ρ1–ρ4 = implied correlations between the outcome error and the choice error, for regime 1 (FISP only), 2 (SAPs only), 3 (FISP + SAPs) and 4 (neither); σ = standard deviation of the outcome error; "–" = not defined for the own regime. Standard errors (`Breps' EA-cluster replications of the full two-step procedure) in parentheses. `STAR'"
 local ATTNOTE "Standard errors in parentheses. ATT = effect for households in the regime; ATU = effect the regime would have for current non-participants; ATE = effect for all households. BH1 and BH2 = base heterogeneity; TH = transitional heterogeneity (ATT − ATU). % change is relative to the counterfactual. `STAR'"
 
 local tabno = 8
@@ -864,4 +951,5 @@ drop _eatag _dtag _nsap _multi _fpoor _fborder _faccept
 
 putdocx save "$result/MESR_tables_10_15.docx", replace
 di as result "All tables and figures written to: $result/MESR_tables_10_15.docx"
+mesr_tex_finish
 log close mesrlog

@@ -145,14 +145,14 @@ if (0) {
 *Change the if to 1 if you want to run a specific function through the do file 
 
 		* Cleaning stage: disabled in the supplied master (if 0). 
- if (0) {
+ if (1) {
  	
 		do "$dofiles/01_data_cleaning.do" 
  }
 		
 		
 		* Estimation stage: disabled in the supplied master (if 0). 
- if (0) {
+ if (1) {
 	do "$dofiles/07_MESR_main.do"
  }
 

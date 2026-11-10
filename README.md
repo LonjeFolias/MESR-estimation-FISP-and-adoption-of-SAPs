@@ -67,7 +67,7 @@ Upload the generated **`tables/` and `figures/`** folders into the Overleaf proj
 
 The effects overview retains regime bands, tinted ATT/ATU/ATE columns, a red zero reference, significance stars and a distinct colour for the largest point estimate within each outcome. Detailed effects tables retain the definitions beneath the table, bold ATE rows and spacing between regime groups. Footer definitions are controlled by the presentation's preamble, not by the exporter.
 
-See [the output map](docs/PRESENTATION_EXPORTS.md) and [file guide](docs/FILE_GUIDE.md). The selected MNP table shows rows significant at 5% in at least one regime, retaining all three regime coefficients and reference-category labels; the full MNP table remains available for the annex.
+The selected MNP table shows rows significant at 5% in at least one regime, retaining all three regime coefficients and reference-category labels; the full MNP table remains available for the annex.
 
 ## Version and verification
 
